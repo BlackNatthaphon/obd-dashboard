@@ -1,0 +1,52 @@
+{
+  "expo": {
+    "name": "OBD Dashboard",
+    "slug": "obd-dashboard",
+    "version": "3.0.0",
+    "orientation": "default",
+    "icon": "./assets/icon.png",
+    "scheme": "obddash",
+    "userInterfaceStyle": "dark",
+    "backgroundColor": "#0b0f14",
+    "ios": {
+      "bundleIdentifier": "digital.blacktech.obd",
+      "supportsTablet": true
+    },
+    "android": {
+      "package": "digital.blacktech.obd",
+      "versionCode": 6,
+      "adaptiveIcon": {
+        "backgroundColor": "#0b0f14",
+        "foregroundImage": "./assets/android-icon-foreground.png",
+        "monochromeImage": "./assets/android-icon-monochrome.png"
+      },
+      "permissions": ["android.permission.VIBRATE"],
+      "predictiveBackGestureEnabled": false
+    },
+    "web": {
+      "favicon": "./assets/favicon.png",
+      "output": "single"
+    },
+    "plugins": [
+      "expo-router",
+      [
+        "react-native-ble-plx",
+        {
+          "isBackgroundEnabled": false,
+          "neverForLocation": true,
+          "bluetoothAlwaysPermission": "ใช้ Bluetooth เพื่อเชื่อมต่อตัวเสียบ OBD"
+        }
+      ],
+      [
+        "expo-audio",
+        {
+          "microphonePermission": false,
+          "recordAudioAndroid": false,
+          "enableBackgroundPlayback": false
+        }
+      ],
+      "expo-screen-orientation",
+      "./plugins/withReleaseSigning"
+    ]
+  }
+}
