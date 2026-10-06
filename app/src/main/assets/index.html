@@ -1,282 +1,131 @@
 <!doctype html>
-<html lang="th">
+<html lang="th" data-theme="midnight">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>OBD Dashboard</title>
-<link rel="manifest" href="manifest.json">
-<meta name="theme-color" content="#0d1117">
-<style>
-  :root{--bg:#0d1117;--card:#161b22;--line:#30363d;--fg:#e6edf3;--mut:#8b949e;--acc:#2f81f7;--ok:#3fb950;--warn:#d29922;--bad:#f85149}
-  *{box-sizing:border-box}
-  body{margin:0;background:var(--bg);color:var(--fg);font-family:system-ui,-apple-system,"Segoe UI",sans-serif}
-  header{display:flex;flex-wrap:wrap;gap:10px;align-items:center;padding:14px 16px;border-bottom:1px solid var(--line);position:sticky;top:0;background:var(--bg);z-index:2}
-  h1{font-size:18px;margin:0;flex:1}
-  button{background:var(--acc);color:#fff;border:0;border-radius:10px;padding:10px 16px;font-size:15px;font-weight:600}
-  button.sec{background:var(--card);border:1px solid var(--line)}
-  button.danger{background:var(--bad)}
-  button:disabled{opacity:.4}
-  #status{font-size:13px;color:var(--mut);width:100%}
-  .dot{display:inline-block;width:9px;height:9px;border-radius:50%;background:var(--mut);margin-right:6px}
-  .dot.on{background:var(--ok)}
-  main{padding:16px;max-width:1100px;margin:auto}
-  .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:12px}
-  .card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:14px}
-  .lbl{font-size:13px;color:var(--mut)}
-  .val{font-size:38px;font-weight:700;font-variant-numeric:tabular-nums;margin-top:4px}
-  .unit{font-size:14px;color:var(--mut);margin-left:4px;font-weight:400}
-  .na .val{color:var(--line)}
-  .bar{height:6px;background:var(--line);border-radius:3px;margin-top:8px;overflow:hidden}
-  .bar i{display:block;height:100%;background:var(--acc);width:0;transition:width .3s}
-  section{margin-top:20px}
-  h2{font-size:16px;margin:0 0 10px}
-  .row{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px}
-  .dtc{font-family:ui-monospace,monospace;font-size:20px;padding:6px 10px;background:var(--bg);border:1px solid var(--warn);color:var(--warn);border-radius:8px;display:inline-block;margin:4px}
-  #log{font-family:ui-monospace,monospace;font-size:12px;color:var(--mut);background:#010409;border:1px solid var(--line);border-radius:10px;padding:10px;height:200px;overflow:auto;white-space:pre-wrap;display:none}
-  .hint{font-size:13px;color:var(--mut);line-height:1.6}
-</style>
+<meta name="theme-color" content="#0b0f14">
+<link rel="stylesheet" href="css/app.css">
 </head>
 <body>
-<header>
-  <h1><span class="dot" id="dot"></span>OBD Dashboard</h1>
-  <button id="btnConnect">เชื่อมต่อ</button>
-  <button id="btnStop" class="sec" disabled>หยุด</button>
-  <div id="status">ยังไม่เชื่อมต่อ — ปิดแอพ YMOBD ก่อน แล้วกด "เชื่อมต่อ"</div>
+<header id="top">
+  <h1><span class="dot" id="dot"></span><span id="title">OBD Dashboard</span></h1>
+  <button id="rec" class="ico" title="บันทึกข้อมูล">●</button>
+  <button id="hudBtn" class="ico" title="โหมด HUD">HUD</button>
+  <button id="conn" class="pri">เชื่อมต่อ</button>
+  <button id="setBtn" class="ico ghost" title="ตั้งค่า"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg></button>
 </header>
-<main>
-  <div class="grid" id="grid"></div>
+<div id="statusbar"><span id="status">ยังไม่เชื่อมต่อ</span><span id="hz"></span></div>
 
-  <section>
-    <h2>รหัสข้อผิดพลาด (DTC)</h2>
-    <div class="row">
-      <button id="btnDtc" class="sec" disabled>อ่านรหัส</button>
-      <button id="btnClear" class="danger" disabled>ล้างรหัส / ดับไฟโชว์</button>
+<main>
+  <!-- แดชบอร์ด -->
+  <section class="page on" id="p-dash">
+    <div id="hero" class="card hero">
+      <svg width="54" height="54" viewBox="0 0 108 108" fill="none"><path d="M24 76a34 34 0 1 1 60 0" stroke="var(--line)" stroke-width="8" stroke-linecap="round"/><path d="M24 76a34 34 0 0 1 49-45" stroke="var(--acc)" stroke-width="8" stroke-linecap="round"/><path d="M54 74l16-20" stroke="var(--fg)" stroke-width="5" stroke-linecap="round"/><circle cx="54" cy="74" r="6" fill="var(--fg)"/></svg>
+      <h3>ยังไม่ได้เชื่อมต่อ</h3>
+      <div class="hint">ติดเครื่องรถ ปิดแอพ OBD ตัวอื่น แล้วกด "เชื่อมต่อ"<br>หรือลองเล่นทุกฟังก์ชันด้วยรถจำลองก่อนก็ได้</div>
+      <div class="row"><button class="pri" data-act="connect">เชื่อมต่อรถ</button><button data-act="sim">ลองโหมดจำลอง</button></div>
     </div>
-    <div id="dtc" class="hint">ยังไม่ได้อ่าน</div>
+    <div class="row" style="flex-wrap:nowrap">
+      <div class="chips" id="dashChips" style="flex:1"></div>
+      <button id="editBtn" class="ico">✎ แก้ไข</button>
+    </div>
+    <div class="row" id="editBar" style="display:none;margin-bottom:10px">
+      <button data-act="dash-rename">เปลี่ยนชื่อ</button>
+      <button data-act="dash-reset">ค่าเริ่มต้น</button>
+      <button data-act="dash-del" class="bad">ลบหน้านี้</button>
+    </div>
+    <div class="grid" id="grid"></div>
   </section>
 
-  <section>
-    <div class="row">
-      <button id="btnLog" class="sec">แสดง/ซ่อน Log</button>
-      <button id="btnForget" class="sec" style="display:none">เปลี่ยนตัวเสียบ</button>
-      <span class="hint" id="info"></span>
+  <!-- จับเวลา -->
+  <section class="page" id="p-race">
+    <div class="chips" id="raceChips"></div>
+    <div class="card racebox" id="racebox">
+      <div class="shift" id="shift"></div>
+      <div class="spd"><span id="rSpd">--</span><small>km/h</small></div>
+      <div class="rpmbar"><i id="rRpmBar"></i></div>
+      <div class="tmr" id="rTmr">0.00</div>
+      <div class="msg" id="rMsg">เลือกโหมดแล้วกด "พร้อม"</div>
+      <div class="sub">
+        <div>ระยะทาง<b id="rDist">0 ม.</b></div>
+        <div>แรง G สูงสุด<b id="rG">0.00</b></div>
+        <div>รอบ<b id="rRpm">--</b></div>
+      </div>
+      <button class="pri big-btn" id="armBtn">พร้อม</button>
     </div>
-    <div id="log"></div>
+    <h2>ผลจับเวลา <span class="sp"></span><button class="ghost" data-act="runs-clear" style="font-size:13px;color:var(--mut)">ล้างประวัติ</button></h2>
+    <div class="runs card" id="runs" style="padding:4px 12px"></div>
+
+    <h2>จับเวลารอบสนาม (Lap)</h2>
+    <div class="card racebox laps">
+      <div class="tmr" id="lapTmr">0:00.00</div>
+      <div class="sub"><div>รวม<b id="lapTot">0:00.00</b></div><div>ดีที่สุด<b id="lapBest">--</b></div><div>รอบที่<b id="lapN">0</b></div></div>
+      <div class="row" style="margin-top:12px;flex-wrap:nowrap">
+        <button class="pri big-btn" id="lapGo" style="margin:0">เริ่ม</button>
+        <button class="big-btn" id="lapLap" style="margin:0" disabled>รอบ</button>
+        <button class="big-btn" id="lapReset" style="margin:0;flex:.6">รีเซ็ต</button>
+      </div>
+      <div class="runs" id="laps" style="text-align:left"></div>
+    </div>
+    <p class="hint">ความแม่นยำขึ้นกับความเร็วในการอ่านของตัวเสียบ (ดูตัวเลข "ค่า/วิ" มุมขวาบน) ยิ่งสูงยิ่งแม่น แอพจะประมาณจุดเริ่ม/จบระหว่างจังหวะอ่านให้อัตโนมัติ · ใช้ในสนามหรือพื้นที่ปิดเท่านั้น</p>
+  </section>
+
+  <!-- ค่าทั้งหมด -->
+  <section class="page" id="p-live">
+    <h2>ทริปนี้ <span class="sp"></span><button class="ghost" data-act="trip-reset" style="font-size:13px;color:var(--mut)">เริ่มทริปใหม่</button></h2>
+    <div class="card trip" id="trip"></div>
+    <h2>ค่าทั้งหมด <span class="sp"></span><span class="hint" id="liveCount"></span></h2>
+    <input class="search" id="liveSearch" placeholder="ค้นหา เช่น อุณหภูมิ, O2, rpm">
+    <div class="list" id="liveList"></div>
+  </section>
+
+  <!-- กราฟ -->
+  <section class="page" id="p-graph">
+    <div class="row" style="flex-wrap:nowrap">
+      <div class="chips" id="gWin" style="flex:1"></div>
+      <button id="gPause" class="ico">❚❚</button>
+    </div>
+    <canvas id="chart"></canvas>
+    <div class="legend" id="legend"></div>
+    <div class="row"><button data-act="g-add">+ เพิ่มเส้นกราฟ</button><span class="hint">สูงสุด 4 เส้น · แต่ละเส้นปรับสเกลอัตโนมัติ</span></div>
+  </section>
+
+  <!-- ตรวจเช็ค -->
+  <section class="page" id="p-diag">
+    <div class="card mil off" id="mil">
+      <svg viewBox="0 0 48 48" fill="currentColor"><path d="M9 18h4v-4h6v-3h10v3h4l4 4h3v-3h3v16h-3v-3h-3v6h-6l-4 4H18l-4-4H9v-5H6v5H3V18h3v5h3z"/></svg>
+      <div><b id="milTxt">ยังไม่ได้ตรวจ</b><div class="hint" id="milSub">กด "สแกน" เพื่ออ่านรหัสและสถานะ</div></div>
+    </div>
+    <div class="row" style="margin-top:10px">
+      <button class="pri" data-act="diag-scan">สแกน</button>
+      <button class="bad" data-act="diag-clear">ล้างรหัส / ดับไฟโชว์</button>
+    </div>
+    <h2>รหัสข้อผิดพลาด</h2>
+    <div class="card" id="dtcs" style="padding:4px 12px"><div class="hint" style="padding:10px 0">ยังไม่ได้อ่าน</div></div>
+    <h2>ความพร้อมระบบตรวจสอบ (ก่อนตรวจสภาพ)</h2>
+    <div class="card"><div class="mon" id="mon"><div class="hint">ยังไม่ได้อ่าน</div></div></div>
+    <h2>ข้อมูลรถ</h2>
+    <div class="card"><dl class="kv" id="carinfo"></dl></div>
   </section>
 </main>
 
-<script>
-// ---------- ค่าที่จะอ่าน (OBD-II Mode 01) ----------
-const PIDS = [
-  {pid:'0C', name:'รอบเครื่อง',      unit:'rpm', max:7000, f:b=>(b[0]*256+b[1])/4, d:0},
-  {pid:'0D', name:'ความเร็ว',       unit:'km/h',max:220,  f:b=>b[0], d:0},
-  {pid:'05', name:'อุณหภูมิน้ำ',     unit:'°C',  max:130,  f:b=>b[0]-40, d:0},
-  {pid:'04', name:'โหลดเครื่อง',    unit:'%',   max:100,  f:b=>b[0]*100/255, d:0},
-  {pid:'11', name:'ลิ้นปีกผีเสื้อ',   unit:'%',   max:100,  f:b=>b[0]*100/255, d:0},
-  {pid:'0F', name:'อุณหภูมิอากาศเข้า',unit:'°C',  max:80,   f:b=>b[0]-40, d:0},
-  {pid:'0B', name:'แรงดันท่อร่วม',   unit:'kPa', max:255,  f:b=>b[0], d:0},
-  {pid:'10', name:'MAF',            unit:'g/s', max:200,  f:b=>(b[0]*256+b[1])/100, d:1},
-  {pid:'2F', name:'น้ำมันเหลือ',     unit:'%',   max:100,  f:b=>b[0]*100/255, d:0},
-  {pid:'42', name:'แรงดันไฟ ECU',    unit:'V',   max:16,   f:b=>(b[0]*256+b[1])/1000, d:1},
-  {pid:'06', name:'Fuel trim สั้น',  unit:'%',   max:100,  f:b=>b[0]*100/128-100, d:1},
-  {pid:'07', name:'Fuel trim ยาว',   unit:'%',   max:100,  f:b=>b[0]*100/128-100, d:1},
-  {pid:'5B', name:'แบตไฮบริด',       unit:'%',   max:100,  f:b=>b[0]*100/255, d:0},
-];
-const FAST = new Set(['0C','0D','04','11','0B','10']); // อ่านทุกรอบ ที่เหลืออ่านทุก 5 รอบ
+<nav id="tabs">
+  <button data-page="dash" class="on"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 17a8 8 0 1 1 16 0"/><path d="M12 17l4-5"/></svg>แดช</button>
+  <button data-page="race"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="14" r="7"/><path d="M12 14V10M9 3h6M12 3v4"/></svg>จับเวลา</button>
+  <button data-page="live"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M8 6h12M8 12h12M8 18h12M4 6h.01M4 12h.01M4 18h.01"/></svg>ค่าทั้งหมด</button>
+  <button data-page="graph"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 20h18M4 16l5-6 4 4 7-9"/></svg>กราฟ</button>
+  <button data-page="diag"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M14.7 6.3a4 4 0 0 0 5 5L21 13l-8 8-3-3 6.3-6.3a4 4 0 0 1-5-5L13 5z"/><path d="M3 21l6-6"/></svg>ตรวจเช็ค</button>
+</nav>
 
-// UUID ที่ตัว ELM327 BLE ใช้บ่อย
-const SERVICES = [0xfff0, 0xffe0, 0x18f0, 'e7810a71-73ae-499d-8c15-faa9aef0c3f2'];
+<div id="sheet"><div class="bk"></div><div class="pan"><div class="hd"><h3 id="shT"></h3><button class="ico ghost" data-act="sheet-close">✕</button></div><div id="shB"></div></div></div>
 
-const $ = id => document.getElementById(id);
-const grid = $('grid');
-PIDS.forEach(p=>{
-  p.el = document.createElement('div');
-  p.el.className='card na';
-  p.el.innerHTML=`<div class="lbl">${p.name}</div><div class="val">--<span class="unit">${p.unit}</span></div><div class="bar"><i></i></div>`;
-  grid.appendChild(p.el);
-});
+<div id="hud"><div class="x"><button data-act="hud-mirror">กลับด้าน</button><button data-act="hud-close">✕</button></div>
+  <div class="in"><div class="s" id="hudS">0</div><div class="u">km/h</div><div class="rb"><i id="hudR"></i></div><div class="r" id="hudRpm">0 rpm</div></div></div>
+<div id="toast"></div>
 
-let device, rxChar, txChar, writeNoResp=false, buf='', pending=null, running=false, isCan=true, wakeLock, devName='OBD';
-const NATIVE = !!window.AndroidBle;   // true = รันในแอพ Android
-let nativeWait=null;
-
-function log(s){ const l=$('log'); l.textContent += s+'\n'; l.scrollTop=l.scrollHeight; }
-function status(s,on){ $('status').textContent=s; $('dot').classList.toggle('on',!!on); }
-$('btnLog').onclick=()=>{ const l=$('log'); l.style.display = l.style.display==='block'?'none':'block'; };
-
-// callback จากฝั่ง Android
-window.__ble = {
-  status(s){ status(s); },
-  log(s){ log(s); },
-  connected(name){ if(nativeWait){ const w=nativeWait; nativeWait=null; w.res(name); } },
-  error(msg){ log('ERR '+msg); if(nativeWait){ const w=nativeWait; nativeWait=null; w.rej(new Error(msg)); } else status(msg); },
-  data(str){ handleText(str); },
-  disconnected(){ onDisconnect(); },
-};
-
-// ---------- Bluetooth ----------
-async function openLink(){
-  if(NATIVE){
-    devName = await new Promise((res,rej)=>{ nativeWait={res,rej}; AndroidBle.connect(); });
-    return;
-  }
-  if(!navigator.bluetooth) throw new Error('เบราว์เซอร์นี้ไม่รองรับ Web Bluetooth — ใช้ Chrome บน Android และเปิดผ่าน https');
-  status('กำลังค้นหาอุปกรณ์...');
-  device = await navigator.bluetooth.requestDevice({acceptAllDevices:true, optionalServices:SERVICES});
-  device.addEventListener('gattserverdisconnected', onDisconnect);
-  devName = device.name||'OBD';
-  status('กำลังเชื่อมต่อ '+devName+'...');
-  const server = await device.gatt.connect();
-  for(const s of await server.getPrimaryServices()){
-    for(const c of await s.getCharacteristics()){
-      const p=c.properties;
-      if(!rxChar && (p.notify||p.indicate)) rxChar=c;
-      if(!txChar && (p.write||p.writeWithoutResponse)){ txChar=c; writeNoResp=!p.write && p.writeWithoutResponse; }
-    }
-    if(rxChar&&txChar){ log('Service '+s.uuid); break; }
-  }
-  if(!rxChar||!txChar) throw new Error('ไม่พบช่องรับส่งข้อมูลของ OBD ในอุปกรณ์นี้');
-  log('RX '+rxChar.uuid+'  TX '+txChar.uuid);
-  await rxChar.startNotifications();
-  rxChar.addEventListener('characteristicvaluechanged', e=>handleText(new TextDecoder().decode(e.target.value)));
-}
-
-async function connect(){
-  $('btnConnect').disabled=true;
-  try{
-    await openLink();
-    await initElm();
-    $('btnStop').disabled=false; $('btnDtc').disabled=false; $('btnClear').disabled=false;
-    if(!NATIVE){ try{ wakeLock = await navigator.wakeLock?.request('screen'); }catch(e){} }
-    running=true; loop();
-  }catch(e){
-    status('เชื่อมต่อไม่สำเร็จ: '+e.message); log('ERR '+e.message);
-    $('btnConnect').disabled=false;
-  }
-}
-
-function onDisconnect(){
-  running=false; rxChar=txChar=null;
-  if(pending){ const p=pending; pending=null; clearTimeout(p.t); p.res('TIMEOUT'); }
-  status('หลุดการเชื่อมต่อ — กด "เชื่อมต่อ" อีกครั้ง');
-  $('btnConnect').disabled=false; $('btnStop').disabled=true; $('btnDtc').disabled=true; $('btnClear').disabled=true;
-}
-
-function handleText(str){
-  buf += str;
-  if(buf.includes('>') && pending){
-    const out = buf.split('>')[0]; buf='';
-    const p=pending; pending=null; clearTimeout(p.t); p.res(out);
-  }
-}
-
-async function writeRaw(text){
-  if(NATIVE){ AndroidBle.write(text); return; }
-  const data = new TextEncoder().encode(text);
-  for(let i=0;i<data.length;i+=20){
-    const chunk=data.slice(i,i+20);
-    writeNoResp ? await txChar.writeValueWithoutResponse(chunk) : await txChar.writeValue(chunk);
-  }
-}
-
-async function send(cmd, timeout=4000){
-  while(pending) await new Promise(r=>setTimeout(r,10));
-  buf='';
-  const prom = new Promise(res=>{ pending={res,t:setTimeout(()=>{pending=null;res('TIMEOUT');},timeout)}; });
-  await writeRaw(cmd+'\r');
-  const r = (await prom).replace(/\r/g,'\n').split('\n').map(s=>s.trim()).filter(Boolean);
-  log('> '+cmd+'  '+r.join(' | '));
-  return r;
-}
-
-async function initElm(){
-  status('กำลังตั้งค่า ELM327...',true);
-  await send('ATZ',6000);
-  for(const c of ['ATE0','ATL0','ATS0','ATH0','ATAT1','ATSP0']) await send(c);
-  const id = await send('ATI'); const v = await send('ATRV');
-  status('กำลังหาโปรโตคอลรถ (ครั้งแรกอาจใช้ 5-10 วินาที)...',true);
-  await send('0100',15000);
-  const dp = (await send('ATDPN'))[0]||'';
-  const n = parseInt(dp.replace('A',''),16);
-  isCan = n>=6 && n<=9;
-  $('info').textContent = `${id[0]||''} · โปรโตคอล ${dp} · แบต ${v[0]||'-'}`;
-  status('เชื่อมต่อแล้ว: '+devName,true);
-}
-
-// ---------- อ่านค่า ----------
-function parse(lines, pid){
-  const want='41'+pid;
-  for(const l of lines){
-    const h=l.replace(/\s/g,'').toUpperCase();
-    const i=h.indexOf(want);
-    if(i>=0){ const bytes=[]; for(let j=i+4;j+1<h.length;j+=2) bytes.push(parseInt(h.substr(j,2),16)); return bytes; }
-  }
-  return null;
-}
-
-async function loop(){
-  let n=0;
-  while(running){
-    for(const p of PIDS){
-      if(!running) break;
-      if(p.retryAt && n<p.retryAt) continue;          // เครื่องดับ (โหมด EV) ค่าบางตัวจะหายไป ลองใหม่ทีหลัง
-      if(!FAST.has(p.pid) && n%5) continue;
-      const r = await send('01'+p.pid);
-      const b = parse(r,p.pid);
-      if(!b || b.some(isNaN)){
-        if(r.join().includes('NO DATA')) { p.retryAt=n+15; p.el.classList.add('na'); p.el.querySelector('.val').firstChild.textContent='--'; }
-        continue;
-      }
-      p.retryAt=0;
-      const v=p.f(b);
-      p.el.classList.remove('na');
-      p.el.querySelector('.val').firstChild.textContent=v.toFixed(p.d);
-      p.el.querySelector('.bar i').style.width=Math.max(0,Math.min(100,Math.abs(v)/p.max*100))+'%';
-    }
-    n++;
-  }
-}
-
-$('btnStop').onclick=()=>{ running=false; NATIVE ? AndroidBle.disconnect() : device?.gatt?.disconnect(); };
-$('btnForget').onclick=()=>{ if(NATIVE){ AndroidBle.forget(); status('ลืมอุปกรณ์แล้ว — กด "เชื่อมต่อ" เพื่อสแกนใหม่'); } };
-if(NATIVE){ $('btnForget').style.display=''; const n=AndroidBle.savedName(); $('status').textContent = n ? 'กด "เชื่อมต่อ" เพื่อต่อกับ '+n : 'ติดเครื่องรถ ปิดแอพ OBD อื่น แล้วกด "เชื่อมต่อ"'; }
-$('btnConnect').onclick=connect;
-
-// ---------- DTC ----------
-function decodeDtc(a,b){
-  const t='PCBU'[a>>6];
-  return t + ((a>>4)&3) + (a&15).toString(16) + (b>>4).toString(16) + (b&15).toString(16);
-}
-async function readDtc(){
-  const was=running; running=false; await new Promise(r=>setTimeout(r,300));
-  $('dtc').textContent='กำลังอ่าน...';
-  const r = await send('03',8000);
-  const codes=[];
-  for(let l of r){
-    l=l.replace(/\s/g,'').toUpperCase().replace(/^[0-9A-F]:/,'');
-    if(/^[0-9A-F]{3}$/.test(l)) continue;           // บรรทัดความยาว multi-frame
-    let h=l; const i=h.indexOf('43'); if(i===0) h=h.slice(2+(isCan?2:0));
-    for(let j=0;j+3<h.length;j+=4){
-      const a=parseInt(h.substr(j,2),16), b=parseInt(h.substr(j+2,2),16);
-      if(isNaN(a)||isNaN(b)||(a===0&&b===0)) continue;
-      codes.push(decodeDtc(a,b).toUpperCase());
-    }
-  }
-  const uniq=[...new Set(codes)];
-  $('dtc').innerHTML = r.join().includes('NO DATA') || !uniq.length
-    ? '<span style="color:var(--ok)">✓ ไม่พบรหัสข้อผิดพลาด</span>'
-    : uniq.map(c=>`<span class="dtc">${c}</span>`).join('') + '<div class="hint">ค้นหาความหมายรหัสได้จาก Google เช่น "P0171 BMW"</div>';
-  if(was){ running=true; loop(); }
-}
-async function clearDtc(){
-  if(!confirm('ล้างรหัสข้อผิดพลาดทั้งหมด?\nควรดับเครื่องแต่เปิดสวิตช์ไว้ และรหัสจะกลับมาถ้าปัญหายังไม่ถูกแก้')) return;
-  const was=running; running=false; await new Promise(r=>setTimeout(r,300));
-  const r=await send('04',8000);
-  $('dtc').textContent = r.join().includes('44') ? 'ล้างรหัสแล้ว' : 'ล้างไม่สำเร็จ: '+r.join(' ');
-  if(was){ running=true; loop(); }
-}
-$('btnDtc').onclick=readDtc;
-$('btnClear').onclick=clearDtc;
-</script>
+<script src="js/catalog.js"></script>
+<script src="js/obd.js"></script>
+<script src="js/app.js"></script>
 </body>
 </html>

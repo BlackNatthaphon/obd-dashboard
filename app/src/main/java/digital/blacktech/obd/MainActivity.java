@@ -17,6 +17,8 @@ import android.bluetooth.le.BluetoothLeScanner;
 import android.bluetooth.le.ScanCallback;
 import android.bluetooth.le.ScanResult;
 import android.content.Intent;
+import android.content.pm.ActivityInfo;
+import android.net.Uri;
 import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
 import android.graphics.Color;
@@ -24,13 +26,16 @@ import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
+import android.view.View;
 import android.view.WindowManager;
 import android.webkit.JavascriptInterface;
+import android.webkit.WebChromeClient;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
 
 import org.json.JSONObject;
 
+import java.io.OutputStream;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
@@ -51,6 +56,7 @@ public class MainActivity extends Activity {
     private static final UUID CCCD = UUID.fromString("00002902-0000-1000-8000-00805f9b34fb");
     private static final int REQ_PERM = 1;
     private static final int REQ_ENABLE_BT = 2;
+    private static final int REQ_SAVE = 3;
     private static final long SCAN_MS = 5000;
 
     private WebView web;
@@ -63,6 +69,7 @@ public class MainActivity extends Activity {
     private boolean ready = false;
     private boolean fromSaved = false;
     private SharedPreferences prefs;
+    private String saveText, saveName;
 
     @SuppressLint({"SetJavaScriptEnabled", "AddJavascriptInterface"})
     @Override
@@ -81,6 +88,8 @@ public class MainActivity extends Activity {
         WebSettings s = web.getSettings();
         s.setJavaScriptEnabled(true);
         s.setDomStorageEnabled(true);
+        s.setMediaPlaybackRequiresUserGesture(false);
+        web.setWebChromeClient(new WebChromeClient());
         web.addJavascriptInterface(new Bridge(), "AndroidBle");
         web.loadUrl("file:///android_asset/index.html");
         setContentView(web);
@@ -119,7 +128,76 @@ public class MainActivity extends Activity {
 
         @JavascriptInterface
         public String savedName() { return prefs.getString("name", ""); }
+
+        @JavascriptInterface
+        public void openUrl(String url) {
+            if (!url.startsWith("https://")) return;
+            ui.post(() -> {
+                try { startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse(url))); }
+                catch (Exception e) { js("error", "เปิดลิงก์ไม่ได้"); }
+            });
+        }
+
+        // บันทึกไฟล์ (เช่น CSV) ให้ผู้ใช้เลือกที่เก็บเอง
+        @JavascriptInterface
+        public void saveFile(String name, String text) {
+            ui.post(() -> {
+                saveName = name;
+                saveText = text;
+                Intent i = new Intent(Intent.ACTION_CREATE_DOCUMENT);
+                i.addCategory(Intent.CATEGORY_OPENABLE);
+                i.setType("text/csv");
+                i.putExtra(Intent.EXTRA_TITLE, name);
+                try { startActivityForResult(i, REQ_SAVE); }
+                catch (Exception e) { js("error", "บันทึกไฟล์ไม่ได้"); }
+            });
+        }
+
+        @JavascriptInterface
+        public void setFullscreen(boolean on) { ui.post(() -> applyFullscreen(on)); }
+
+        @JavascriptInterface
+        public void setOrientation(String mode) {
+            ui.post(() -> setRequestedOrientation(
+                    "landscape".equals(mode) ? ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
+                    : "portrait".equals(mode) ? ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
+                    : ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED));
+        }
+
+        @JavascriptInterface
+        public void setBarColor(String hex) {
+            ui.post(() -> {
+                try {
+                    int c = Color.parseColor(hex);
+                    getWindow().setStatusBarColor(c);
+                    getWindow().setNavigationBarColor(c);
+                    web.setBackgroundColor(c);
+                    // ธีมสว่างให้ไอคอนแถบสถานะเป็นสีเข้ม
+                    boolean light = Color.luminance(c) > 0.5f;
+                    View d = getWindow().getDecorView();
+                    int f = d.getSystemUiVisibility();
+                    int lf = View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR | View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR;
+                    d.setSystemUiVisibility(light ? f | lf : f & ~lf);
+                } catch (Exception ignored) { }
+            });
+        }
     }
+
+    private void applyFullscreen(boolean on) {
+        View d = getWindow().getDecorView();
+        int keep = d.getSystemUiVisibility() & (View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR | View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR);
+        d.setSystemUiVisibility(keep | (on ? View.SYSTEM_UI_FLAG_FULLSCREEN | View.SYSTEM_UI_FLAG_HIDE_NAVIGATION
+                | View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY | View.SYSTEM_UI_FLAG_LAYOUT_STABLE : 0));
+    }
+
+    @Override
+    public void onBackPressed() {
+        web.evaluateJavascript("window.__back ? window.__back() : false", r -> {
+            if (!"true".equals(r)) defaultBack();
+        });
+    }
+
+    private void defaultBack() { super.onBackPressed(); }
 
     private void js(String fn, String arg) {
         String a = arg == null ? "" : JSONObject.quote(arg);
@@ -184,6 +262,18 @@ public class MainActivity extends Activity {
     @Override
     protected void onActivityResult(int requestCode, int resultCode, Intent data) {
         super.onActivityResult(requestCode, resultCode, data);
+        if (requestCode == REQ_SAVE) {
+            String text = saveText, name = saveName;
+            saveText = null;
+            if (resultCode != RESULT_OK || data == null || data.getData() == null || text == null) return;
+            try (OutputStream os = getContentResolver().openOutputStream(data.getData())) {
+                os.write(text.getBytes(StandardCharsets.UTF_8));
+                ui.post(() -> web.evaluateJavascript("window.__saved && window.__saved(" + JSONObject.quote(name) + ")", null));
+            } catch (Exception e) {
+                js("error", "บันทึกไฟล์ไม่สำเร็จ: " + e.getMessage());
+            }
+            return;
+        }
         if (requestCode == REQ_ENABLE_BT) {
             if (adapter.isEnabled()) startConnect();
             else js("error", "กรุณาเปิด Bluetooth");
@@ -370,6 +460,8 @@ public class MainActivity extends Activity {
 
     private void onReady(BluetoothGatt g) {
         ready = true;
+        // ขอช่วงเชื่อมต่อถี่ขึ้น ให้อ่านค่าได้เร็วขึ้น (สำคัญกับการจับเวลา)
+        g.requestConnectionPriority(BluetoothGatt.CONNECTION_PRIORITY_HIGH);
         BluetoothDevice d = g.getDevice();
         String name = d.getName() != null ? d.getName() : d.getAddress();
         prefs.edit().putString("addr", d.getAddress()).putString("name", name).apply();

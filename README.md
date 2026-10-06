@@ -2,9 +2,17 @@
 
 แอพ Android อ่านค่ารถผ่านตัวเสียบ ELM327 แบบ Bluetooth LE
 
-- หน้าจอ: `app/src/main/assets/index.html` (ใช้เปิดใน Chrome ผ่าน Web Bluetooth ได้ด้วย)
+- หน้าจอ: `app/src/main/assets/` (`index.html`, `css/app.css`, `js/catalog.js` รายการค่า/ธีม/รหัส, `js/obd.js` การเชื่อมต่อ + รถจำลอง, `js/app.js` หน้าจอ) — เปิดใน Chrome ผ่าน Web Bluetooth ได้ด้วย
 - Bluetooth: `MainActivity.java` (native BLE bridge → `window.AndroidBle`)
 - ทุกครั้งที่ push เข้า `main` GitHub Actions จะ build APK แล้วปล่อยไว้ในหน้า **Releases**
+- ถ้า Actions ใช้ไม่ได้: `scripts/build-apk-local.sh` build บน Ubuntu 24.04 ได้โดยไม่ต้องมี Android SDK
+
+## ฟังก์ชัน
+- แดชบอร์ดปรับเองได้หลายหน้า: เพิ่ม/ลบ/ย้าย วิดเจ็ตแบบ ตัวเลข / แถบ / เกจ / กราฟ
+- อ่านทุกค่าที่รถรองรับ (ตรวจจาก ECU อัตโนมัติ) + ค่าคำนวณ: อัตราสิ้นเปลือง, บูสต์, แรง G, ทริป
+- จับเวลา: 0-60, 0-100, 0-400 ม., 0-201 ม., 60-100, 80-120, 100-200, เบรก 100-0 / 60-0 พร้อมไฟเปลี่ยนเกียร์ และ Lap timer
+- กราฟสด, อ่าน/ล้างรหัส DTC (บันทึก/รอยืนยัน/ถาวร) พร้อมคำอธิบายภาษาไทย, ความพร้อมระบบตรวจสอบ, VIN
+- ธีม 5 แบบ, โหมด HUD (กลับด้านสะท้อนกระจก), บันทึกข้อมูลเป็น CSV, โหมดจำลองไว้ลองโดยไม่ต้องต่อรถ
 
 ## ติดตั้ง
 1. ดาวน์โหลด `obd-dashboard.apk` จาก Releases ล่าสุด
