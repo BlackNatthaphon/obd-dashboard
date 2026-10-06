@@ -1,4 +1,5 @@
 // รถจำลอง: ตอบคำสั่งเหมือนตัวเสียบ ELM327 จริง ใช้ลองแอพโดยไม่ต้องต่อรถ
+import { t as tr } from '../i18n';
 import { now, type Transport } from './elm';
 
 const SUPPORTED = ['04', '05', '06', '07', '0A', '0B', '0C', '0D', '0E', '0F', '10', '11', '14', '15', '1F', '2F',
@@ -84,7 +85,7 @@ export function createSimTransport(): Transport {
   function answer(cmd: string): string {
     cmd = cmd.trim().toUpperCase();
     if (cmd === 'ATZ') return 'ELM327 v1.5';
-    if (cmd === 'ATI') return 'ELM327 v1.5 (จำลอง)';
+    if (cmd === 'ATI') return 'ELM327 v1.5 (sim)';
     if (cmd === 'ATRV') return (14.1 + noise(0.2)).toFixed(1) + 'V';
     if (cmd === 'ATDPN') return 'A6';
     if (cmd.startsWith('AT')) return 'OK';
@@ -105,7 +106,7 @@ export function createSimTransport(): Transport {
   }
 
   const t: Transport = {
-    name: 'รถจำลอง',
+    name: tr('simCar'),
     write(text) {
       if (closed) return;
       const cmd = text.replace(/\r/g, '');

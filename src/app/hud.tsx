@@ -8,6 +8,7 @@ import { setHud } from '../core/engine';
 import { setSettings, useSettings } from '../core/settings';
 import { useFrame, val } from '../core/values';
 import { Btn } from '../ui/kit';
+import { t as tr } from '../i18n';
 
 export default function Hud() {
   const cfg = useSettings();
@@ -30,7 +31,7 @@ export default function Hud() {
         <Text style={[st.r, {fontSize: height * 0.07}]}>{r == null ? '--' : r.toFixed(0)} rpm</Text>
       </View>
       <View style={st.x}>
-        <Btn title="กลับด้าน" onPress={() => setSettings({hudMirror: !cfg.hudMirror})} style={st.xb} textStyle={{color: '#ccc'}} />
+        <Btn title={tr('hud.mirror')} onPress={() => setSettings({hudMirror: !cfg.hudMirror})} style={st.xb} textStyle={{color: '#ccc'}} />
         <Btn title="✕" onPress={() => router.back()} style={st.xb} textStyle={{color: '#ccc'}} />
       </View>
     </View>

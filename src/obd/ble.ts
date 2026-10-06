@@ -1,6 +1,7 @@
 // เชื่อมตัวเสียบ ELM327 แบบ Bluetooth LE ผ่าน react-native-ble-plx
 import { PermissionsAndroid, Platform } from 'react-native';
 import { BleManager, ConnectionPriority, type Characteristic, type Subscription } from 'react-native-ble-plx';
+import { AppError } from '../i18n';
 import { b64ToText, textToB64 } from './base64';
 import type { Transport } from './elm';
 
@@ -21,14 +22,14 @@ async function ensureReady() {
       : [PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION];
     const res = await PermissionsAndroid.requestMultiple(perms);
     if (perms.some(p => res[p] !== PermissionsAndroid.RESULTS.GRANTED))
-      throw new Error('ต้องอนุญาตสิทธิ์ Bluetooth (อุปกรณ์ใกล้เคียง) ก่อนใช้งาน');
+      throw new AppError('err.permission');
   }
   let state = await mgr().state();
   if (state === 'Unknown' || state === 'Resetting') {
     await new Promise(r => setTimeout(r, 800));
     state = await mgr().state();
   }
-  if (state !== 'PoweredOn') throw new Error('กรุณาเปิด Bluetooth');
+  if (state !== 'PoweredOn') throw new AppError('err.btOff');
 }
 
 /** สแกนหาอุปกรณ์ BLE รอบๆ ตัว — ชื่อที่ดูเหมือน OBD ขึ้นก่อน */
@@ -37,7 +38,7 @@ export async function scanDevices(ms = 5000): Promise<FoundDevice[]> {
   const found = new Map<string, FoundDevice>();
   let err: Error | null = null;
   await mgr().startDeviceScan(null, {allowDuplicates: false}, async (e, d) => {
-    if (e) { err = new Error('สแกนไม่สำเร็จ: ' + e.message); return; }
+    if (e) { err = new AppError('err.scan', {err: e.message}); return; }
     if (d) found.set(d.id, {id: d.id, name: d.name || d.localName || '', rssi: d.rssi ?? -100, obd: looksObd(d.name || d.localName)});
   });
   await new Promise(r => setTimeout(r, ms));
@@ -68,7 +69,7 @@ export async function openBle(id: string, name: string, timeoutMs = 10000): Prom
   }
   if (!rx || !tx) {
     await m.cancelDeviceConnection(id).catch(() => {});
-    throw new Error('อุปกรณ์นี้ไม่ใช่ตัวเสียบ OBD แบบ BLE (ไม่พบช่องรับส่งข้อมูล)');
+    throw new AppError('err.notObd');
   }
   const writer = tx;
   const withResp = writer.isWritableWithResponse;

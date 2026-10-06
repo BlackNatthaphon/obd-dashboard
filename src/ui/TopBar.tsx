@@ -3,6 +3,7 @@ import { router } from 'expo-router';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Circle, Path } from 'react-native-svg';
+import { t as t2, tm } from '../i18n';
 import { fmtDur } from '../obd/catalog';
 import { now } from '../obd/elm';
 import { connect, recStart, session, startRec, stopRec } from '../core/engine';
@@ -27,9 +28,9 @@ export function TopBar({title}: { title: string }) {
           textStyle={!s.recording && {color: t.bad}} style={st.small}
           onPress={() => (s.recording ? stopRec() : on ? startRec() : undefined)} disabled={!on && !s.recording} />
         <Btn title="HUD" style={st.small} onPress={() => router.push('/hud')} />
-        <Btn title={busy ? 'กำลังต่อ...' : on ? 'หยุด' : 'เชื่อมต่อ'} kind={on ? 'sec' : 'pri'} disabled={busy}
+        <Btn title={busy ? t2('conn.connecting') : on ? t2('conn.stop') : t2('conn.connect')} kind={on ? 'sec' : 'pri'} disabled={busy}
           style={st.small} onPress={() => connect('ble')} />
-        <Pressable onPress={() => router.push('/settings')} hitSlop={8} style={{padding: 6}} accessibilityLabel="ตั้งค่า">
+        <Pressable onPress={() => router.push('/settings')} hitSlop={8} style={{padding: 6}} accessibilityLabel={t2('settings')}>
           <Svg width={22} height={22} viewBox="0 0 24 24" fill="none" stroke={t.fg} strokeWidth={2}>
             <Circle cx={12} cy={12} r={3} />
             <Path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z" />
@@ -37,8 +38,8 @@ export function TopBar({title}: { title: string }) {
         </Pressable>
       </View>
       <View style={st.status}>
-        <Text numberOfLines={1} style={{color: t.mut, fontSize: 12, flex: 1}}>{s.status}</Text>
-        {on && <Text style={{color: t.mut, fontSize: 12, fontVariant: ['tabular-nums']}}>{s.hz.toFixed(1)} ค่า/วิ</Text>}
+        <Text numberOfLines={1} style={{color: t.mut, fontSize: 12, flex: 1}}>{tm(s.status)}</Text>
+        {on && <Text style={{color: t.mut, fontSize: 12, fontVariant: ['tabular-nums']}}>{s.hz.toFixed(1)} {t2('perSec')}</Text>}
       </View>
     </View>
   );

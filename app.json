@@ -20,7 +20,9 @@
         "foregroundImage": "./assets/android-icon-foreground.png",
         "monochromeImage": "./assets/android-icon-monochrome.png"
       },
-      "permissions": ["android.permission.VIBRATE"],
+      "permissions": [
+        "android.permission.VIBRATE"
+      ],
       "predictiveBackGestureEnabled": false
     },
     "web": {
@@ -46,7 +48,8 @@
         }
       ],
       "expo-screen-orientation",
-      "./plugins/withReleaseSigning"
+      "./plugins/withReleaseSigning",
+      "expo-localization"
     ]
   }
 }

@@ -47,8 +47,8 @@ describe('parsers', () => {
     const s = parseStatus([0x82, 0x07, 0x65, 0x04]);
     expect(s.mil).toBe(true);
     expect(s.count).toBe(2);
-    expect(s.mon.find(m => m.name === 'ระบบไอระเหย')?.ok).toBe(false);
-    expect(s.mon.find(m => m.name === 'แคตาไลติก')?.ok).toBe(true);
+    expect(s.mon.find(m => m.key === 'mon.evap')?.ok).toBe(false);
+    expect(s.mon.find(m => m.key === 'mon.cat')?.ok).toBe(true);
   });
   test('base64 round trip', () => {
     expect(b64ToText(textToB64('010C1\r'))).toBe('010C1\r');
@@ -127,6 +127,6 @@ describe('race timer', () => {
     race.arm();
     drive(race, () => 30, 2);
     expect(race.state).toBe('armed');
-    expect(race.msg).toContain('หยุดรถ');
+    expect(race.msg?.k).toBe('race.stopFirst');
   });
 });

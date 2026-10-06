@@ -2,7 +2,8 @@
 import { useMemo, useState } from 'react';
 import { KeyboardAvoidingView, Modal, Platform, Pressable, SectionList, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { CATEGORIES, SRC, type Category } from '../obd/catalog';
+import { t as tr } from '../i18n';
+import { CATEGORIES, catName, SRC, srcName } from '../obd/catalog';
 import { isSupported, pickDevice, session } from '../core/engine';
 import { useStore } from '../core/store';
 import { Btn } from './kit';
@@ -33,14 +34,14 @@ export function SourcePicker({visible, title, onPick, onClose}: { visible: boole
   const [q, setQ] = useState('');
   const sections = useMemo(() => {
     const ql = q.toLowerCase();
-    return (Object.keys(CATEGORIES) as Category[]).map(cat => ({
-      title: CATEGORIES[cat],
-      data: Object.values(SRC).filter(s => s.cat === cat && (!ql || `${s.name} ${s.unit} ${s.id}`.toLowerCase().includes(ql))),
+    return CATEGORIES.map(cat => ({
+      title: catName(cat),
+      data: Object.values(SRC).filter(s => s.cat === cat && (!ql || `${s.name} ${s.en} ${s.unit} ${s.id}`.toLowerCase().includes(ql))),
     })).filter(s => s.data.length);
   }, [q]);
   return (
     <Sheet visible={visible} title={title} onClose={onClose}>
-      <TextInput value={q} onChangeText={setQ} placeholder="ค้นหา" placeholderTextColor={t.mut}
+      <TextInput value={q} onChangeText={setQ} placeholder={tr('search')} placeholderTextColor={t.mut}
         style={[st.input, {color: t.fg, backgroundColor: t.card2, borderColor: t.line}]} />
       <SectionList sections={sections} keyExtractor={s => s.id} style={{maxHeight: 520}} keyboardShouldPersistTaps="handled"
         renderSectionHeader={({section}) => <Text style={[st.cat, {color: t.acc, backgroundColor: t.bg}]}>{section.title}</Text>}
@@ -49,9 +50,9 @@ export function SourcePicker({visible, title, onPick, onClose}: { visible: boole
           return (
             <Pressable onPress={() => { onPick(s.id); onClose(); }} style={[st.it, {borderColor: t.line, opacity: ok ? 1 : 0.45}]}>
               <View style={{flex: 1}}>
-                <Text style={{color: t.fg, fontSize: 14}}>{s.name}</Text>
+                <Text style={{color: t.fg, fontSize: 14}}>{srcName(s)}</Text>
                 <Text style={{color: t.mut, fontSize: 11}}>
-                  {[s.unit, s.mode1 ? 'PID ' + s.id : '', ok ? '' : 'รถคันนี้ไม่รองรับ', s.note ?? ''].filter(Boolean).join(' · ')}
+                  {[s.unit, s.mode1 ? 'PID ' + s.id : '', ok ? '' : tr('pick.unsupported'), s.note ? tr(s.note) : ''].filter(Boolean).join(' · ')}
                 </Text>
               </View>
               <Text style={{color: t.acc, fontSize: 22, fontWeight: '700'}}>+</Text>
@@ -69,7 +70,7 @@ export function TextPrompt({visible, title, initial, onDone}: { visible: boolean
     <Sheet visible={visible} title={title} onClose={() => onDone(null)}>
       <TextInput value={v} onChangeText={setV} autoFocus maxLength={20} onSubmitEditing={() => onDone(v.trim() || null)}
         style={[st.input, {color: t.fg, backgroundColor: t.card2, borderColor: t.line}]} />
-      <Btn title="ตกลง" kind="pri" onPress={() => onDone(v.trim() || null)} style={{marginTop: 12}} />
+      <Btn title={tr('ok')} kind="pri" onPress={() => onDone(v.trim() || null)} style={{marginTop: 12}} />
     </Sheet>
   );
 }
@@ -79,14 +80,14 @@ export function DevicePicker() {
   const t = useTheme();
   const {picker} = useStore(session);
   return (
-    <Sheet visible={!!picker} title="เลือกตัวเสียบ OBD" onClose={() => pickDevice(null)}>
+    <Sheet visible={!!picker} title={tr('picker.title')} onClose={() => pickDevice(null)}>
       {(picker ?? []).map(d => (
         <Pressable key={d.id} onPress={() => pickDevice(d)} style={[st.it, {borderColor: t.line}]}>
           <View style={{flex: 1}}>
-            <Text style={{color: d.obd ? t.fg : t.mut, fontSize: 15, fontWeight: d.obd ? '700' : '400'}}>{d.name || '(ไม่มีชื่อ)'}</Text>
+            <Text style={{color: d.obd ? t.fg : t.mut, fontSize: 15, fontWeight: d.obd ? '700' : '400'}}>{d.name || tr('noName')}</Text>
             <Text style={{color: t.mut, fontSize: 11}}>{d.id} · {d.rssi} dBm</Text>
           </View>
-          {d.obd && <Text style={{color: t.ok, fontSize: 12, fontWeight: '700'}}>น่าจะใช่</Text>}
+          {d.obd && <Text style={{color: t.ok, fontSize: 12, fontWeight: '700'}}>{tr('picker.likely')}</Text>}
         </Pressable>
       ))}
     </Sheet>

@@ -2,7 +2,8 @@
 import { useFocusEffect } from 'expo-router';
 import { useCallback } from 'react';
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
-import { RACE_MODES } from '../../obd/catalog';
+import { locale, t as tr, tm } from '../../i18n';
+import { RACE_MODES, raceName } from '../../obd/catalog';
 import { now } from '../../obd/elm';
 import { bestRun, race, session, setPage } from '../../core/engine';
 import { lap, lapGo, lapLap, lapReset, lapTime } from '../../core/lap';
@@ -30,8 +31,8 @@ export default function RaceScreen() {
   const lit = Math.max(0, Math.min(LEDS, Math.ceil((((rpm ?? 0) - start) / 2500) * LEDS)));
   const flash = (rpm ?? 0) >= cfg.shiftRpm && Math.floor(now() / 150) % 2 === 0;
   const timerCol = st === 'done' ? t.ok : st === 'running' ? t.fg : t.acc;
-  let msg = race.msg || (st === 'idle' ? 'เลือกโหมดแล้วกด “พร้อม”' : '');
-  if (st === 'done' && race.res?.trap) msg += ` · ความเร็วปลาย ${race.res.trap.toFixed(0)} km/h`;
+  let msg = tm(race.msg) || (st === 'idle' ? tr('race.choose') : '');
+  if (st === 'done' && race.res?.trap) msg += ' · ' + tr('race.trap', {v: race.res.trap.toFixed(0)});
   const runs = cfg.runs.filter(r => r.mode === m.id);
   const best = bestRun(m.id);
   const lapBest = lp.laps.length ? Math.min(...lp.laps) : 0;
@@ -47,7 +48,7 @@ export default function RaceScreen() {
   return (
     <ScrollView contentContainerStyle={{padding: 12, paddingBottom: 30, maxWidth: 760, alignSelf: 'center', width: '100%'}}>
       <Chips>
-        {RACE_MODES.map(x => <Chip key={x.id} title={x.name} on={cfg.raceMode === x.id}
+        {RACE_MODES.map(x => <Chip key={x.id} title={raceName(x)} on={cfg.raceMode === x.id}
           onPress={() => { if (st !== 'running') setSettings({raceMode: x.id}); }} />)}
       </Chips>
 
@@ -67,50 +68,50 @@ export default function RaceScreen() {
         </View>
         <Text style={[s.tmr, {color: timerCol, fontFamily: numFont(t)}]}>{race.elapsed(tn).toFixed(2)}</Text>
         <Text style={{color: st === 'armed' || st === 'ready' ? t.warn : t.fg, fontSize: 15, fontWeight: '600', marginTop: 6, textAlign: 'center'}}>
-          {ses.state !== 'connected' && st === 'idle' ? 'เชื่อมต่อรถก่อน (หรือใช้โหมดจำลอง)' : msg}
+          {ses.state !== 'connected' && st === 'idle' ? tr('race.connectFirst') : msg}
         </Text>
         <View style={s.sub}>
-          {[['ระยะทาง', (st === 'done' && race.res ? race.res.dist : race.dist).toFixed(0) + ' ม.'],
-            ['แรง G สูงสุด', Math.abs(race.g).toFixed(2)], ['รอบ', rpm == null ? '--' : rpm.toFixed(0)]].map(([a, b]) => (
+          {[[tr('race.distance'), tr('race.m', {v: (st === 'done' && race.res ? race.res.dist : race.dist).toFixed(0)})],
+            [tr('race.peakG'), Math.abs(race.g).toFixed(2)], [tr('race.rpm'), rpm == null ? '--' : rpm.toFixed(0)]].map(([a, b]) => (
             <View key={a} style={{alignItems: 'center'}}>
               <Text style={{color: t.mut, fontSize: 13}}>{a}</Text>
               <Text style={{color: t.fg, fontSize: 16, fontWeight: '700', fontVariant: ['tabular-nums']}}>{b}</Text>
             </View>
           ))}
         </View>
-        <Btn big title={st === 'idle' ? 'พร้อม' : st === 'done' ? 'อีกครั้ง' : 'ยกเลิก'}
+        <Btn big title={st === 'idle' ? tr('race.ready') : st === 'done' ? tr('race.again') : tr('cancel')}
           kind={st === 'idle' || st === 'done' ? 'pri' : 'bad'} disabled={ses.state !== 'connected' && (st === 'idle' || st === 'done')}
           onPress={arm} style={{alignSelf: 'stretch', marginTop: 12}} />
       </Card>
 
-      <H2 right={<Btn title="ล้างประวัติ" kind="ghost" textStyle={{color: t.mut, fontSize: 13}} onPress={async () => {
-        if (await confirm('ล้างผลจับเวลา?', 'ผลจับเวลาทั้งหมดจะถูกลบ', 'ล้าง')) setSettings({runs: []});
-      }} />}>ผลจับเวลา</H2>
+      <H2 right={<Btn title={tr('race.clear')} kind="ghost" textStyle={{color: t.mut, fontSize: 13}} onPress={async () => {
+        if (await confirm(tr('race.clearQ'), tr('race.clearMsg'), tr('race.clearOk'))) setSettings({runs: []});
+      }} />}>{tr('race.results')}</H2>
       <Card style={{paddingVertical: 4}}>
         {runs.length ? runs.slice(0, 30).map(r => {
           const d = new Date(r.at), isBest = best && r.at === best.at;
-          const extra = [r.trap ? `ปลาย ${r.trap.toFixed(0)} km/h` : '', m.type === 'brake' || m.type === 'dist' ? `${r.dist.toFixed(1)} ม.` : '',
-            r.g ? `${Math.abs(r.g).toFixed(2)} g` : '', r.sim ? 'จำลอง' : ''].filter(Boolean).join(' · ');
+          const extra = [r.trap ? tr('race.trapShort', {v: r.trap.toFixed(0)}) : '', m.type === 'brake' || m.type === 'dist' ? tr('race.m', {v: r.dist.toFixed(1)}) : '',
+            r.g ? `${Math.abs(r.g).toFixed(2)} g` : '', r.sim ? tr('sim') : ''].filter(Boolean).join(' · ');
           return (
             <View key={r.at} style={[s.run, {borderColor: t.line}]}>
               <Text style={[s.runT, {color: isBest ? t.warn : t.fg}]}>{r.time.toFixed(2)}s</Text>
               <Text style={{color: t.mut, fontSize: 12.5, flex: 1}}>
-                {d.toLocaleDateString('th-TH', {day: 'numeric', month: 'short'})} {d.toLocaleTimeString('th-TH', {hour: '2-digit', minute: '2-digit'})}{extra ? ' · ' + extra : ''}
+                {d.toLocaleDateString(locale(), {day: 'numeric', month: 'short'})} {d.toLocaleTimeString(locale(), {hour: '2-digit', minute: '2-digit'})}{extra ? ' · ' + extra : ''}
               </Text>
               {isBest && <Text>🏆</Text>}
             </View>
           );
-        }) : <Hint style={{paddingVertical: 12}}>ยังไม่มีผลของโหมด {m.name}</Hint>}
+        }) : <Hint style={{paddingVertical: 12}}>{tr('race.noRuns', {mode: raceName(m)})}</Hint>}
       </Card>
 
-      <H2>จับเวลารอบสนาม (Lap)</H2>
+      <H2>{tr('lap.title')}</H2>
       <Card style={{alignItems: 'center'}}>
         <Text style={[s.tmr, {color: t.acc, fontSize: 52, fontFamily: numFont(t)}]}>
           {lapTime(lp.on ? tn - lp.lapT0 : lp.pausedLap)}
         </Text>
         <View style={s.sub}>
-          {[['รวม', lapTime(lp.on ? tn - lp.t0 : lp.acc)], ['ดีที่สุด', lapBest ? lapTime(lapBest) : '--'],
-            ['รอบที่', String(lp.laps.length + (lp.on || lp.acc ? 1 : 0))]].map(([a, b]) => (
+          {[[tr('lap.total'), lapTime(lp.on ? tn - lp.t0 : lp.acc)], [tr('lap.best'), lapBest ? lapTime(lapBest) : '--'],
+            [tr('lap.no'), String(lp.laps.length + (lp.on || lp.acc ? 1 : 0))]].map(([a, b]) => (
             <View key={a} style={{alignItems: 'center'}}>
               <Text style={{color: t.mut, fontSize: 13}}>{a}</Text>
               <Text style={{color: t.fg, fontSize: 16, fontWeight: '700', fontVariant: ['tabular-nums']}}>{b}</Text>
@@ -118,21 +119,21 @@ export default function RaceScreen() {
           ))}
         </View>
         <View style={{flexDirection: 'row', gap: 8, marginTop: 12, alignSelf: 'stretch'}}>
-          <Btn big title={lp.on ? 'หยุด' : lp.acc ? 'ต่อ' : 'เริ่ม'} kind={lp.on ? 'bad' : 'pri'} onPress={lapGo} style={{flex: 1}} />
-          <Btn big title="รอบ" disabled={!lp.on} onPress={lapLap} style={{flex: 1}} />
-          <Btn big title="รีเซ็ต" onPress={lapReset} style={{flex: 0.7}} />
+          <Btn big title={lp.on ? tr('lap.stop') : lp.acc ? tr('lap.resume') : tr('lap.start')} kind={lp.on ? 'bad' : 'pri'} onPress={lapGo} style={{flex: 1}} />
+          <Btn big title={tr('lap.lap')} disabled={!lp.on} onPress={lapLap} style={{flex: 1}} />
+          <Btn big title={tr('lap.reset')} onPress={lapReset} style={{flex: 0.7}} />
         </View>
         <View style={{alignSelf: 'stretch'}}>
           {lp.laps.map((l, i) => ({l, i})).reverse().map(({l, i}) => (
             <View key={i} style={[s.run, {borderColor: t.line}]}>
               <Text style={[s.runT, {color: l === lapBest ? t.warn : t.fg}]}>{lapTime(l)}</Text>
-              <Text style={{color: t.mut, fontSize: 12.5}}>รอบ {i + 1}{l === lapBest ? ' · ดีที่สุด' : ` · +${((l - lapBest) / 1000).toFixed(2)} วิ`}</Text>
+              <Text style={{color: t.mut, fontSize: 12.5}}>{tr('lap.n', {n: i + 1})}{l === lapBest ? tr('lap.isBest') : tr('lap.delta', {v: ((l - lapBest) / 1000).toFixed(2)})}</Text>
             </View>
           ))}
         </View>
       </Card>
       <Hint style={{marginTop: 12}}>
-        ความแม่นยำขึ้นกับความเร็วในการอ่านของตัวเสียบ (ดูตัวเลข “ค่า/วิ” มุมขวาบน) ยิ่งสูงยิ่งแม่น แอพจะประมาณจุดเริ่ม/จบระหว่างจังหวะอ่านให้อัตโนมัติ · ใช้ในสนามหรือพื้นที่ปิดเท่านั้น
+        {tr('race.note')}
       </Hint>
     </ScrollView>
   );

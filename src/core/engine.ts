@@ -1,4 +1,5 @@
 // หัวใจของแอพ: เชื่อมต่อ, วนอ่านค่า, คำนวณค่าเพิ่ม, ทริป, จับเวลา, บันทึกข้อมูล
+import { AppError, msg, type Msg } from '../i18n';
 import { SRC, type Source } from '../obd/catalog';
 import { Elm, now, type DtcResult, type ElmInfo, type StatusResult, type Transport } from '../obd/elm';
 import { openBle, scanDevices, type FoundDevice } from '../obd/ble';
@@ -14,7 +15,7 @@ export type Page = 'dash' | 'race' | 'live' | 'graph' | 'diag';
 
 export const session = createStore({
   state: 'idle' as 'idle' | 'connecting' | 'connected',
-  status: 'ยังไม่เชื่อมต่อ',
+  status: msg('st.idle') as Msg,
   hz: 0,
   info: null as ElmInfo | null,
   picker: null as FoundDevice[] | null,
@@ -42,7 +43,7 @@ export function log(s: string) {
   logStore.set({n: logStore.get().n + 1});
 }
 elm.onLog = log;
-elm.onStatus = s => session.set({status: s});
+elm.onStatus = m => session.set({status: m});
 
 // ---------- ค่าที่ต้องอ่าน ----------
 const supportedPid = (id: string) => session.get().state !== 'connected' || !SRC[id]?.mode1 || elm.info.supported.has(id);
@@ -185,7 +186,7 @@ export const race = new Race(settings.get().raceMode, {
     const sim = !!session.get().info?.sim;
     const prevBest = bestRun(r.mode);
     const best = !sim && (!prevBest || r.time < prevBest.time);
-    if (best) race.msg = '🏆 สถิติใหม่!';
+    if (best) race.msg = msg('race.record');
     setSettings({runs: [{...r, at: Date.now(), sim}, ...s.runs].slice(0, 200)});
     beep(1600, best ? 3 : 2);
     buzz([100, 60, 100]);
@@ -208,17 +209,17 @@ async function openTransport(mode: 'ble' | 'sim'): Promise<Transport> {
   if (mode === 'sim') return createSimTransport();
   const saved = settings.get().device;
   if (saved) {
-    session.set({status: `กำลังเชื่อมต่อ ${saved.name}...`});
+    session.set({status: msg('st.connectingTo', {name: saved.name})});
     try { return await openBle(saved.id, saved.name, 10000); }
-    catch (e) { log('ต่อกับตัวเดิมไม่ได้: ' + (e as Error).message); }
-    session.set({status: 'ต่อกับตัวเดิมไม่ได้ กำลังสแกนใหม่...'});
+    catch (e) { log('saved adapter failed: ' + (e as Error).message); }
+    session.set({status: msg('st.savedFailed')});
   }
-  session.set({status: 'กำลังค้นหาตัวเสียบ OBD (5 วินาที)...'});
+  session.set({status: msg('st.scanning')});
   const list = await scanDevices(5000);
-  if (!list.length) throw new Error('ไม่พบอุปกรณ์ — ติดเครื่องรถ และปิดแอพ OBD อื่นที่ต่ออยู่ก่อน');
-  const d = await new Promise<FoundDevice | null>(res => { pickResolve = res; session.set({picker: list, status: 'เลือกตัวเสียบ OBD'}); });
-  if (!d) throw new Error('ยกเลิกการเชื่อมต่อ');
-  session.set({status: `กำลังเชื่อมต่อ ${d.name || d.id}...`});
+  if (!list.length) throw new AppError('err.noDevice');
+  const d = await new Promise<FoundDevice | null>(res => { pickResolve = res; session.set({picker: list, status: msg('st.pick')}); });
+  if (!d) throw new AppError('err.cancelled');
+  session.set({status: msg('st.connectingTo', {name: d.name || d.id})});
   const t = await openBle(d.id, d.name, 12000);
   setSettings({device: {id: d.id, name: d.name || d.id}});
   return t;
@@ -237,10 +238,10 @@ export async function connect(mode: 'ble' | 'sim' = 'ble') {
     lastSpd = null;
     race.reset();
     diag.set({status: null, dtc: null, vin: null, scanned: false});
-    session.set({state: 'connected', info, status: `เชื่อมต่อแล้ว: ${info.name}${info.sim ? '' : ' · ' + info.elm}`});
+    session.set({state: 'connected', info, status: msg('st.connected', {name: info.name + (info.sim ? '' : ' · ' + info.elm)})});
     pollLoop();
   } catch (e) {
-    session.set({state: 'idle', status: 'เชื่อมต่อไม่สำเร็จ: ' + (e as Error).message});
+    session.set({state: 'idle', status: msg('st.failed', {err: (e as Error).message})});
     log('ERR ' + (e as Error).message);
   }
 }
@@ -252,7 +253,7 @@ elm.onLost = () => {
   if (rec) stopRec();
   race.reset();
   setSettings({trip: {...trip}});
-  session.set({state: 'idle', hz: 0, status: 'ตัดการเชื่อมต่อแล้ว'});
+  session.set({state: 'idle', hz: 0, status: msg('st.disconnected')});
 };
 
 export function forgetDevice() { setSettings({device: null}); }
@@ -305,5 +306,5 @@ export async function stopRec() {
   const d = r.start, p = (n: number) => String(n).padStart(2, '0');
   const name = `obd-${d.getFullYear()}${p(d.getMonth() + 1)}${p(d.getDate())}-${p(d.getHours())}${p(d.getMinutes())}.csv`;
   try { await exportCsv(name, '﻿' + csv); }
-  catch (e) { log('ERR บันทึกไฟล์: ' + (e as Error).message); }
+  catch (e) { log('ERR save file: ' + (e as Error).message); }
 }

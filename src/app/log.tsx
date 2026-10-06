@@ -4,6 +4,7 @@ import { ScrollView, Text } from 'react-native';
 import { elm, logLines, logStore } from '../core/engine';
 import { useStore } from '../core/store';
 import { Toggle } from '../ui/kit';
+import { t as tr } from '../i18n';
 import { useTheme } from '../ui/theme';
 
 export default function Log() {
@@ -14,9 +15,9 @@ export default function Log() {
   return (
     <ScrollView ref={ref} style={{backgroundColor: t.bg}} contentContainerStyle={{padding: 14}}
       onContentSizeChange={() => ref.current?.scrollToEnd({animated: false})}>
-      <Toggle label="บันทึกทุกคำสั่ง (ละเอียด)" value={verbose} onChange={v => { elm.verbose = v; setVerbose(v); }} />
+      <Toggle label={tr('log.verbose')} value={verbose} onChange={v => { elm.verbose = v; setVerbose(v); }} />
       <Text selectable style={{color: t.mut, fontFamily: 'monospace', fontSize: 11, marginTop: 8}}>
-        {logLines.join('\n') || '(ยังไม่มี)'}
+        {logLines.join('\n') || tr('none')}
       </Text>
     </ScrollView>
   );

@@ -1,6 +1,7 @@
 // วิดเจ็ตหนึ่งช่องบนแดชบอร์ด: ตัวเลข / แถบ / เกจ / กราฟ
 import { Pressable, StyleSheet, Text, View } from 'react-native';
-import { fmtVal, isAlarm, SRC, type Widget } from '../obd/catalog';
+import { t as tr } from '../i18n';
+import { fmtVal, isAlarm, SRC, srcName, type Widget } from '../obd/catalog';
 import { isSupported, session } from '../core/engine';
 import { settings } from '../core/settings';
 import { V, val } from '../core/values';
@@ -9,7 +10,6 @@ import { Gauge } from './Gauge';
 import { numFont, useTheme } from './theme';
 
 export type WidgetAction = 'left' | 'right' | 'type' | 'size' | 'del';
-const TYPE_ICON = {num: 'เลข', bar: 'แถบ', gauge: 'เกจ', graph: 'กราฟ'};
 
 export function WidgetView({w, width, editing, onAction}: {
   w: Widget; width: number; editing: boolean; onAction: (a: WidgetAction) => void;
@@ -28,7 +28,7 @@ export function WidgetView({w, width, editing, onAction}: {
 
   return (
     <View style={[st.wd, {width, backgroundColor: t.card, borderColor: alarm ? t.bad : t.line}, alarm && {borderWidth: 2}]}>
-      <Text numberOfLines={1} style={[st.lbl, {color: t.mut}]}>{src.name}{na ? ' · ไม่รองรับ' : ''}</Text>
+      <Text numberOfLines={1} style={[st.lbl, {color: t.mut}]}>{srcName(src)}{na ? ' · ' + tr('unsupported') : ''}</Text>
       {w.type === 'gauge' ? (
         <View style={{alignItems: 'center', marginBottom: -8}}>
           <Gauge src={src} v={v} width={Math.min(inner, w.size === 2 ? 240 : 200)} labels={w.size === 2}
@@ -52,7 +52,7 @@ export function WidgetView({w, width, editing, onAction}: {
       )}
       {editing && (
         <View style={st.tools}>
-          {([['left', '◀'], ['right', '▶'], ['type', TYPE_ICON[w.type]], ['size', w.size === 2 ? '½' : '⤢'], ['del', '✕']] as [WidgetAction, string][])
+          {([['left', '◀'], ['right', '▶'], ['type', tr(`w.${w.type}`)], ['size', w.size === 2 ? '½' : '⤢'], ['del', '✕']] as [WidgetAction, string][])
             .map(([a, label]) => (
               <Pressable key={a} onPress={() => onAction(a)} hitSlop={4}
                 style={[st.tool, {backgroundColor: t.card2, borderColor: t.line}]}>

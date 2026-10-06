@@ -7,6 +7,7 @@ import { useEffect } from 'react';
 import { Platform, View } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { loadSettings, useSettings } from '../core/settings';
+import { t as tr } from '../i18n';
 import { DevicePicker } from '../ui/Sheets';
 import { useTheme } from '../ui/theme';
 
@@ -35,9 +36,9 @@ export default function Root() {
         <StatusBar style={t.dark ? 'light' : 'dark'} />
         <Stack screenOptions={{headerShown: false, contentStyle: {backgroundColor: t.bg}}}>
           <Stack.Screen name="(tabs)" />
-          <Stack.Screen name="settings" options={{presentation: 'modal', headerShown: true, title: 'ตั้งค่า',
+          <Stack.Screen name="settings" options={{presentation: 'modal', headerShown: true, title: tr('settings'),
             headerStyle: {backgroundColor: t.bg}, headerTintColor: t.fg}} />
-          <Stack.Screen name="log" options={{presentation: 'modal', headerShown: true, title: 'Log',
+          <Stack.Screen name="log" options={{presentation: 'modal', headerShown: true, title: tr('log.title'),
             headerStyle: {backgroundColor: t.bg}, headerTintColor: t.fg}} />
           <Stack.Screen name="hud" options={{presentation: 'fullScreenModal', animation: 'fade'}} />
         </Stack>

@@ -1,13 +1,14 @@
 import { Tabs } from 'expo-router';
+import { t as tr, type Key } from '../../i18n';
 import { TabIcon, TopBar } from '../../ui/TopBar';
 import { useTheme } from '../../ui/theme';
 
-const TABS: [string, string, string][] = [
-  ['index', 'แดช', 'แดชบอร์ด'],
-  ['race', 'จับเวลา', 'จับเวลา'],
-  ['live', 'ค่าทั้งหมด', 'ค่าทั้งหมด'],
-  ['graph', 'กราฟ', 'กราฟ'],
-  ['diag', 'ตรวจเช็ค', 'ตรวจเช็ค'],
+const TABS: [string, Key, Key][] = [
+  ['index', 'tab.dash', 'title.dash'],
+  ['race', 'tab.race', 'tab.race'],
+  ['live', 'tab.live', 'tab.live'],
+  ['graph', 'tab.graph', 'tab.graph'],
+  ['diag', 'tab.diag', 'tab.diag'],
 ];
 
 export default function TabsLayout() {
@@ -22,8 +23,8 @@ export default function TabsLayout() {
     }}>
       {TABS.map(([name, label, title]) => (
         <Tabs.Screen key={name} name={name} options={{
-          title: label,
-          header: () => <TopBar title={title} />,
+          title: tr(label),
+          header: () => <TopBar title={tr(title)} />,
           tabBarIcon: ({color}) => <TabIcon name={name} color={String(color)} />,
         }} />
       ))}

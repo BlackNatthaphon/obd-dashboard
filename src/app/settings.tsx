@@ -6,6 +6,7 @@ import { connect, disconnect, forgetDevice, session } from '../core/engine';
 import { DEFAULTS, setSettings, useSettings, type Orientation, type ThemeName } from '../core/settings';
 import { Btn, Chip, confirm, Hint, Stepper, Toggle } from '../ui/kit';
 import { THEMES, useTheme } from '../ui/theme';
+import { LANGS, t as tr, type Key } from '../i18n';
 
 const clone = <T,>(o: T): T => JSON.parse(JSON.stringify(o));
 
@@ -24,56 +25,62 @@ export default function Settings() {
   const cfg = useSettings();
   return (
     <ScrollView style={{backgroundColor: t.bg}} contentContainerStyle={{padding: 16, paddingBottom: 40, maxWidth: 760, alignSelf: 'center', width: '100%'}}>
-      <Section title="ธีม">
+      <Section title={tr('set.language')}>
+        <View style={{flexDirection: 'row', flexWrap: 'wrap', gap: 8}}>
+          <Chip title={tr('set.langAuto')} on={cfg.lang === 'auto'} onPress={() => setSettings({lang: 'auto'})} />
+          {LANGS.map(l => <Chip key={l.id} title={l.name} on={cfg.lang === l.id} onPress={() => setSettings({lang: l.id})} />)}
+        </View>
+      </Section>
+      <Section title={tr('set.theme')}>
         <View style={{flexDirection: 'row', gap: 8}}>
           {(Object.keys(THEMES) as ThemeName[]).map(k => (
             <Pressable key={k} onPress={() => setSettings({theme: k})}
               style={[st.sw, {backgroundColor: THEMES[k].card, borderColor: cfg.theme === k ? t.acc : THEMES[k].line}]}>
               <View style={{width: 18, height: 18, borderRadius: 9, backgroundColor: THEMES[k].acc, marginBottom: 6}} />
-              <Text style={{color: THEMES[k].fg, fontSize: 12, fontWeight: '600'}}>{THEMES[k].name}</Text>
+              <Text style={{color: THEMES[k].fg, fontSize: 12, fontWeight: '600'}}>{tr(`theme.${k}` as Key)}</Text>
             </Pressable>
           ))}
         </View>
       </Section>
-      <Section title="จับเวลา / รอบเครื่อง">
-        <Stepper label="ไฟเตือนเปลี่ยนเกียร์" value={cfg.shiftRpm} step={100} min={2500} max={9000} unit="rpm" onChange={v => setSettings({shiftRpm: v})} />
-        <Stepper label="เรดไลน์ (เกจรอบ)" value={cfg.redline} step={100} min={3000} max={9500} unit="rpm" onChange={v => setSettings({redline: v})} />
+      <Section title={tr('set.timing')}>
+        <Stepper label={tr('set.shift')} value={cfg.shiftRpm} step={100} min={2500} max={9000} unit="rpm" onChange={v => setSettings({shiftRpm: v})} />
+        <Stepper label={tr('set.redline')} value={cfg.redline} step={100} min={3000} max={9500} unit="rpm" onChange={v => setSettings({redline: v})} />
       </Section>
-      <Section title="น้ำมัน (ใช้คำนวณอัตราสิ้นเปลือง)">
+      <Section title={tr('set.fuel')}>
         <View style={{flexDirection: 'row', gap: 8}}>
-          <Chip title="เบนซิน/แก๊สโซฮอล์" on={cfg.fuel === 'gas'} onPress={() => setSettings({fuel: 'gas'})} />
-          <Chip title="ดีเซล" on={cfg.fuel === 'diesel'} onPress={() => setSettings({fuel: 'diesel'})} />
+          <Chip title={tr('set.gas')} on={cfg.fuel === 'gas'} onPress={() => setSettings({fuel: 'gas'})} />
+          <Chip title={tr('set.diesel')} on={cfg.fuel === 'diesel'} onPress={() => setSettings({fuel: 'diesel'})} />
         </View>
-        <Hint style={{marginTop: 6}}>ถ้ารถไม่ส่งอัตรากินน้ำมันมาเอง แอพจะประมาณจาก MAF (ดีเซลคลาดเคลื่อนได้มาก)</Hint>
+        <Hint style={{marginTop: 6}}>{tr('set.fuelHint')}</Hint>
       </Section>
       <Section>
-        <Toggle label="เสียงบี๊บ (จับเวลา / ไฟเปลี่ยนเกียร์)" value={cfg.sound} onChange={v => setSettings({sound: v})} />
-        <Toggle label="สั่น" value={cfg.vibrate} onChange={v => setSettings({vibrate: v})} />
-        <Toggle label="HUD กลับด้าน (สะท้อนกระจกหน้า)" value={cfg.hudMirror} onChange={v => setSettings({hudMirror: v})} />
+        <Toggle label={tr('set.sound')} value={cfg.sound} onChange={v => setSettings({sound: v})} />
+        <Toggle label={tr('set.vibrate')} value={cfg.vibrate} onChange={v => setSettings({vibrate: v})} />
+        <Toggle label={tr('set.hudMirror')} value={cfg.hudMirror} onChange={v => setSettings({hudMirror: v})} />
       </Section>
       {Platform.OS !== 'web' && (
-        <Section title="การหมุนจอ">
+        <Section title={tr('set.orient')}>
           <View style={{flexDirection: 'row', gap: 8}}>
-            {([['auto', 'อัตโนมัติ'], ['landscape', 'แนวนอน'], ['portrait', 'แนวตั้ง']] as [Orientation, string][])
-              .map(([k, n]) => <Chip key={k} title={n} on={cfg.orient === k} onPress={() => setSettings({orient: k})} />)}
+            {([['auto', 'set.orientAuto'], ['landscape', 'set.landscape'], ['portrait', 'set.portrait']] as [Orientation, Key][])
+              .map(([k, n]) => <Chip key={k} title={tr(n)} on={cfg.orient === k} onPress={() => setSettings({orient: k})} />)}
           </View>
         </Section>
       )}
-      <Section title="การเชื่อมต่อ">
-        {cfg.device && <Hint style={{marginBottom: 8}}>ตัวเสียบที่จำไว้: {cfg.device.name}</Hint>}
+      <Section title={tr('set.connection')}>
+        {cfg.device && <Hint style={{marginBottom: 8}}>{tr('set.saved', {name: cfg.device.name})}</Hint>}
         <View style={{flexDirection: 'row', flexWrap: 'wrap', gap: 8}}>
-          {cfg.device && <Btn title="เปลี่ยนตัวเสียบ" onPress={() => { forgetDevice(); router.back(); }} />}
-          <Btn title="โหมดจำลอง" onPress={() => { if (session.get().state === 'connected') disconnect(); router.back(); setTimeout(() => connect('sim'), 50); }} />
-          <Btn title="ดู Log" onPress={() => router.push('/log')} />
+          {cfg.device && <Btn title={tr('set.change')} onPress={() => { forgetDevice(); router.back(); }} />}
+          <Btn title={tr('set.sim')} onPress={() => { if (session.get().state === 'connected') disconnect(); router.back(); setTimeout(() => connect('sim'), 50); }} />
+          <Btn title={tr('set.log')} onPress={() => router.push('/log')} />
         </View>
       </Section>
-      <Section title="ข้อมูล">
+      <Section title={tr('set.data')}>
         <View style={{flexDirection: 'row', flexWrap: 'wrap', gap: 8}}>
-          <Btn title="รีเซ็ตแดชบอร์ดทั้งหมด" onPress={async () => {
-            if (await confirm('รีเซ็ตแดชบอร์ด?', 'แดชบอร์ดทุกหน้าจะกลับเป็นค่าเริ่มต้น', 'รีเซ็ต')) setSettings({dash: clone(DEFAULTS.dash), dashIdx: 0});
+          <Btn title={tr('set.resetDash')} onPress={async () => {
+            if (await confirm(tr('set.resetDashQ'), tr('set.resetDashMsg'), tr('set.resetOk'))) setSettings({dash: clone(DEFAULTS.dash), dashIdx: 0});
           }} />
-          <Btn title="ล้างผลจับเวลา" onPress={async () => {
-            if (await confirm('ล้างผลจับเวลา?', 'ผลจับเวลาทั้งหมดจะถูกลบ', 'ล้าง')) setSettings({runs: []});
+          <Btn title={tr('set.clearRuns')} onPress={async () => {
+            if (await confirm(tr('race.clearQ'), tr('race.clearMsg'), tr('race.clearOk'))) setSettings({runs: []});
           }} />
         </View>
       </Section>

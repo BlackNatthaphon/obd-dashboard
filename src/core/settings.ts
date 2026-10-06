@@ -1,5 +1,7 @@
 // การตั้งค่าที่เก็บไว้ในเครื่อง
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { getLocales } from 'expo-localization';
+import { pickLang, setLang, type Lang } from '../i18n';
 import { PRESETS, type Dash } from '../obd/catalog';
 import { createStore, useStore } from './store';
 
@@ -12,6 +14,8 @@ export interface RaceRun {
 export interface Trip { dist: number; time: number; fuel: number; max: number; }
 
 export interface Settings {
+  /** 'auto' = ตามภาษาเครื่อง */
+  lang: 'auto' | Lang;
   theme: ThemeName;
   dash: Dash[];
   dashIdx: number;
@@ -33,7 +37,7 @@ export interface Settings {
 const clone = <T,>(o: T): T => JSON.parse(JSON.stringify(o));
 
 export const DEFAULTS: Settings = {
-  theme: 'midnight', dash: clone(PRESETS), dashIdx: 0, shiftRpm: 6000, redline: 6500, fuel: 'gas',
+  lang: 'auto', theme: 'midnight', dash: clone(PRESETS), dashIdx: 0, shiftRpm: 6000, redline: 6500, fuel: 'gas',
   sound: true, vibrate: true, hudMirror: false, raceMode: '0-100', runs: [], graph: ['0C', '0D', '11'], graphWin: 60,
   orient: 'auto', trip: {dist: 0, time: 0, fuel: 0, max: 0}, device: null,
 };
@@ -41,8 +45,15 @@ export const DEFAULTS: Settings = {
 const KEY = 'obd-dashboard/settings';
 export const settings = createStore<Settings & { loaded: boolean }>({...clone(DEFAULTS), loaded: false});
 
+function deviceLang(): Lang {
+  try { return pickLang(getLocales()[0]?.languageCode); } catch { return 'en'; }
+}
+const applyLang = () => { const l = settings.get().lang; setLang(l === 'auto' ? deviceLang() : l); };
+applyLang();
+
 let saveT: ReturnType<typeof setTimeout> | undefined;
 settings.subscribe(() => {
+  applyLang();
   if (!settings.get().loaded) return;
   clearTimeout(saveT);
   saveT = setTimeout(() => {

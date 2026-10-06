@@ -1,4 +1,5 @@
 // โปรโตคอล ELM327: คิวคำสั่ง, ตั้งค่า, อ่านค่า, รหัสข้อผิดพลาด (ไม่ขึ้นกับว่าต่อผ่านอะไร)
+import { AppError, msg, type Key, type Msg } from '../i18n';
 import type { Source } from './catalog';
 
 export const now = (): number => (globalThis.performance?.now ? globalThis.performance.now() : Date.now());
@@ -27,7 +28,7 @@ export interface ElmInfo {
 }
 
 export interface DtcResult { stored: string[]; pending: string[]; perm: string[]; }
-export interface Monitor { name: string; ok: boolean; }
+export interface Monitor { key: Key; ok: boolean; }
 export interface StatusResult { mil: boolean; count: number; diesel: boolean; mon: Monitor[]; }
 export type ReadResult = { v: number; t: number } | 'NODATA' | null;
 
@@ -91,14 +92,14 @@ export function parseVin(lines: string[]): string | null {
 export function parseStatus(b: number[]): StatusResult {
   const [A, B, C, D] = b;
   const mon: Monitor[] = [];
-  const add = (name: string, sup: number, inc: number) => { if (sup) mon.push({name, ok: !inc}); };
-  add('มิสไฟร์', B & 1, B & 16);
-  add('ระบบน้ำมัน', B & 2, B & 32);
-  add('ชิ้นส่วนต่างๆ', B & 4, B & 64);
-  const names = !(B & 8)
-    ? ['แคตาไลติก', 'แคตแบบอุ่น', 'ระบบไอระเหย', 'อากาศรอง', 'แอร์', 'เซ็นเซอร์ O2', 'ฮีตเตอร์ O2', 'EGR/VVT']
-    : ['แคต NMHC', 'NOx/SCR', '', 'แรงดันบูสต์', '', 'เซ็นเซอร์ไอเสีย', 'PM ฟิลเตอร์', 'EGR/VVT'];
-  names.forEach((n, i) => n && add(n, C & (1 << i), D & (1 << i)));
+  const add = (key: Key, sup: number, inc: number) => { if (sup) mon.push({key, ok: !inc}); };
+  add('mon.misfire', B & 1, B & 16);
+  add('mon.fuel', B & 2, B & 32);
+  add('mon.components', B & 4, B & 64);
+  const keys: (Key | '')[] = !(B & 8)
+    ? ['mon.cat', 'mon.heatedCat', 'mon.evap', 'mon.air', 'mon.ac', 'mon.o2', 'mon.o2heater', 'mon.egr']
+    : ['mon.nmhc', 'mon.nox', '', 'mon.boost', '', 'mon.exhaust', 'mon.pm', 'mon.egr'];
+  keys.forEach((k, i) => k && add(k, C & (1 << i), D & (1 << i)));
   return {mil: !!(A & 0x80), count: A & 0x7f, diesel: !!(B & 8), mon};
 }
 
@@ -110,7 +111,7 @@ export class Elm {
   info: ElmInfo = {name: '', elm: '', proto: '', isCan: true, count: false, supported: new Set(), sim: false};
   verbose = false;
   onLog: (s: string) => void = () => {};
-  onStatus: (s: string) => void = () => {};
+  onStatus: (m: Msg) => void = () => {};
   onLost: () => void = () => {};
 
   get connected() { return !!this.link; }
@@ -185,17 +186,17 @@ export class Elm {
 
   private async init() {
     const info = this.info;
-    this.onStatus('กำลังตั้งค่า ELM327...');
+    this.onStatus(msg('st.elmSetup'));
     await this.send('ATZ', 6000);
     for (const c of ['ATE0', 'ATL0', 'ATS0', 'ATH0', 'ATSP0']) await this.send(c);
     const at = await this.send('ATAT2');
     if (at.join().includes('?')) await this.send('ATAT1');
     info.elm = (await this.send('ATI'))[0] || '';
-    this.onStatus('กำลังหาโปรโตคอลรถ (ครั้งแรกอาจใช้ 5-10 วินาที)...');
+    this.onStatus(msg('st.protocol'));
     let first = await this.send('0100', 15000);
     if (!parse01(first, '00', 4)) first = await this.send('0100', 15000);
     const bm = parse01(first, '00', 4);
-    if (!bm) throw new Error('ECU ไม่ตอบ — ติดเครื่องหรือเปิดสวิตช์ ON ก่อน (' + first.join(' ') + ')');
+    if (!bm) throw new AppError('err.noEcu', {resp: first.join(' ')});
     const dp = (await this.send('ATDPN'))[0] || '';
     const n = parseInt(dp.replace('A', ''), 16);
     info.proto = dp;
@@ -210,7 +211,7 @@ export class Elm {
     }
     // CAN: เติม "1" ท้ายคำสั่งให้ตอบทันทีไม่ต้องรอ ECU อื่น (เร็วขึ้นมาก)
     if (info.isCan && info.supported.has('0D')) info.count = !!parse01(await this.send('010D1'), '0D', 1);
-    this.onLog(`ELM ${info.elm} · โปรโตคอล ${dp} · CAN ${info.isCan} · fast ${info.count} · รองรับ ${info.supported.size} ค่า`);
+    this.onLog(`ELM ${info.elm} · protocol ${dp} · CAN ${info.isCan} · fast ${info.count} · ${info.supported.size} PIDs`);
   }
 
   async read(src: Source): Promise<ReadResult> {

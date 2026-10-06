@@ -1,6 +1,7 @@
 // ปุ่ม การ์ด ชิป และของใช้ร่วมกันทุกหน้า
 import type { ReactNode } from 'react';
 import { Alert, Platform, Pressable, ScrollView, StyleSheet, Switch, Text, View, type StyleProp, type TextStyle, type ViewStyle } from 'react-native';
+import { t as tr } from '../i18n';
 import { useTheme } from './theme';
 
 type Kind = 'pri' | 'bad' | 'sec' | 'ghost';
@@ -83,7 +84,7 @@ export function Stepper({label, value, step, min, max, onChange, unit}: {
 export function confirm(title: string, msg: string, ok: string): Promise<boolean> {
   if (Platform.OS === 'web') return Promise.resolve(window.confirm(title + '\n\n' + msg));
   return new Promise(res => Alert.alert(title, msg, [
-    {text: 'ยกเลิก', style: 'cancel', onPress: () => res(false)},
+    {text: tr('cancel'), style: 'cancel', onPress: () => res(false)},
     {text: ok, style: 'destructive', onPress: () => res(true)},
   ], {cancelable: true, onDismiss: () => res(false)}));
 }

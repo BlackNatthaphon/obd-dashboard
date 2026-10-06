@@ -2,7 +2,8 @@
 import { useFocusEffect } from 'expo-router';
 import { useCallback, useState } from 'react';
 import { Pressable, ScrollView, Text, View } from 'react-native';
-import { fmtVal, SRC } from '../../obd/catalog';
+import { t as tr, type Key } from '../../i18n';
+import { fmtVal, SRC, srcName } from '../../obd/catalog';
 import { now } from '../../obd/elm';
 import { setPage } from '../../core/engine';
 import { setSettings, useSettings } from '../../core/settings';
@@ -12,7 +13,7 @@ import { Btn, Card, Chip, Chips, Hint } from '../../ui/kit';
 import { SourcePicker } from '../../ui/Sheets';
 import { GRAPH_COLORS, useTheme } from '../../ui/theme';
 
-const WINDOWS: [number, string][] = [[30, '30 วิ'], [60, '1 นาที'], [120, '2 นาที'], [300, '5 นาที']];
+const WINDOWS: [number, Key][] = [[30, 'graph.30s'], [60, 'graph.1m'], [120, 'graph.2m'], [300, 'graph.5m']];
 
 export default function Graph() {
   const t = useTheme();
@@ -27,7 +28,7 @@ export default function Graph() {
     <ScrollView contentContainerStyle={{padding: 12, paddingBottom: 30, maxWidth: 1000, alignSelf: 'center', width: '100%'}}>
       <View style={{flexDirection: 'row', alignItems: 'center', gap: 6}}>
         <View style={{flex: 1}}>
-          <Chips>{WINDOWS.map(([s, n]) => <Chip key={s} title={n} on={cfg.graphWin === s} onPress={() => setSettings({graphWin: s})} />)}</Chips>
+          <Chips>{WINDOWS.map(([s, n]) => <Chip key={s} title={tr(n)} on={cfg.graphWin === s} onPress={() => setSettings({graphWin: s})} />)}</Chips>
         </View>
         <Btn title={frozen == null ? '❚❚' : '▶'} onPress={() => setFrozen(frozen == null ? now() : null)} />
       </View>
@@ -40,7 +41,7 @@ export default function Graph() {
         {cfg.graph.map((id, i) => SRC[id] && (
           <View key={id} style={{flexDirection: 'row', alignItems: 'center', gap: 6}}>
             <View style={{width: 12, height: 4, borderRadius: 2, backgroundColor: GRAPH_COLORS[i]}} />
-            <Text style={{color: t.fg, fontSize: 13}}>{SRC[id].name} <Text style={{fontWeight: '700'}}>{fmtVal(SRC[id], val(id))}</Text> {SRC[id].unit}</Text>
+            <Text style={{color: t.fg, fontSize: 13}}>{srcName(SRC[id])} <Text style={{fontWeight: '700'}}>{fmtVal(SRC[id], val(id))}</Text> {SRC[id].unit}</Text>
             <Pressable hitSlop={8} onPress={() => setSettings(s => ({graph: s.graph.filter(x => x !== id)}))}>
               <Text style={{color: t.mut, fontSize: 15, paddingHorizontal: 4}}>✕</Text>
             </Pressable>
@@ -48,10 +49,10 @@ export default function Graph() {
         ))}
       </View>
       <View style={{flexDirection: 'row', alignItems: 'center', gap: 10}}>
-        <Btn title="+ เพิ่มเส้นกราฟ" disabled={cfg.graph.length >= 4} onPress={() => setAdding(true)} />
-        <Hint>สูงสุด 4 เส้น · แต่ละเส้นปรับสเกลอัตโนมัติ</Hint>
+        <Btn title={tr('graph.add')} disabled={cfg.graph.length >= 4} onPress={() => setAdding(true)} />
+        <Hint>{tr('graph.hint')}</Hint>
       </View>
-      <SourcePicker visible={adding} title="เพิ่มเส้นกราฟ" onClose={() => setAdding(false)}
+      <SourcePicker visible={adding} title={tr('graph.addTitle')} onClose={() => setAdding(false)}
         onPick={id => setSettings(s => ({graph: s.graph.includes(id) ? s.graph : [...s.graph, id].slice(0, 4)}))} />
     </ScrollView>
   );
