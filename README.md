@@ -1,6 +1,14 @@
-# OBD Dashboard
-เว็บแอพอ่านค่ารถผ่านตัวเสียบ ELM327 Bluetooth LE ด้วย Web Bluetooth (Chrome บน Android)
+# OBD Dashboard (Android)
 
-- เปิดผ่าน GitHub Pages (ต้องเป็น https)
-- ปิดแอพ OBD อื่นก่อน แล้วกด "เชื่อมต่อ" ไม่ต้องจับคู่ใน Bluetooth settings
-- Chrome → เมนู ⋮ → "เพิ่มลงในหน้าจอหลัก" เพื่อใช้เหมือนแอพ
+แอพ Android อ่านค่ารถผ่านตัวเสียบ ELM327 แบบ Bluetooth LE
+
+- หน้าจอ: `app/src/main/assets/index.html` (ใช้เปิดใน Chrome ผ่าน Web Bluetooth ได้ด้วย)
+- Bluetooth: `MainActivity.java` (native BLE bridge → `window.AndroidBle`)
+- ทุกครั้งที่ push เข้า `main` GitHub Actions จะ build APK แล้วปล่อยไว้ในหน้า **Releases**
+
+## ติดตั้ง
+1. ดาวน์โหลด `obd-dashboard.apk` จาก Releases ล่าสุด
+2. อนุญาต "ติดตั้งแอพที่ไม่รู้จัก" ให้เบราว์เซอร์/ไฟล์
+3. เปิดแอพ → อนุญาต "อุปกรณ์ใกล้เคียง" → ติดเครื่องรถ → กด "เชื่อมต่อ"
+
+ปิดแอพ OBD ตัวอื่นก่อน เพราะตัวเสียบรับได้ทีละเครื่อง

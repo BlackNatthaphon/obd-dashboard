@@ -58,6 +58,7 @@
   <section>
     <div class="row">
       <button id="btnLog" class="sec">แสดง/ซ่อน Log</button>
+      <button id="btnForget" class="sec" style="display:none">เปลี่ยนตัวเสียบ</button>
       <span class="hint" id="info"></span>
     </div>
     <div id="log"></div>
@@ -95,64 +96,94 @@ PIDS.forEach(p=>{
   grid.appendChild(p.el);
 });
 
-let device, rxChar, txChar, writeNoResp=false, buf='', pending=null, running=false, isCan=true, wakeLock;
+let device, rxChar, txChar, writeNoResp=false, buf='', pending=null, running=false, isCan=true, wakeLock, devName='OBD';
+const NATIVE = !!window.AndroidBle;   // true = รันในแอพ Android
+let nativeWait=null;
 
 function log(s){ const l=$('log'); l.textContent += s+'\n'; l.scrollTop=l.scrollHeight; }
 function status(s,on){ $('status').textContent=s; $('dot').classList.toggle('on',!!on); }
 $('btnLog').onclick=()=>{ const l=$('log'); l.style.display = l.style.display==='block'?'none':'block'; };
 
+// callback จากฝั่ง Android
+window.__ble = {
+  status(s){ status(s); },
+  log(s){ log(s); },
+  connected(name){ if(nativeWait){ const w=nativeWait; nativeWait=null; w.res(name); } },
+  error(msg){ log('ERR '+msg); if(nativeWait){ const w=nativeWait; nativeWait=null; w.rej(new Error(msg)); } else status(msg); },
+  data(str){ handleText(str); },
+  disconnected(){ onDisconnect(); },
+};
+
 // ---------- Bluetooth ----------
-async function connect(){
-  if(!navigator.bluetooth){ status('เบราว์เซอร์นี้ไม่รองรับ Web Bluetooth — ใช้ Chrome บน Android และเปิดผ่าน https'); return; }
-  try{
-    status('กำลังค้นหาอุปกรณ์...');
-    device = await navigator.bluetooth.requestDevice({acceptAllDevices:true, optionalServices:SERVICES});
-    device.addEventListener('gattserverdisconnected', onDisconnect);
-    status('กำลังเชื่อมต่อ '+(device.name||'')+'...');
-    const server = await device.gatt.connect();
-    const services = await server.getPrimaryServices();
-    for(const s of services){
-      for(const c of await s.getCharacteristics()){
-        const p=c.properties;
-        if(!rxChar && (p.notify||p.indicate)) rxChar=c;
-        if(!txChar && (p.write||p.writeWithoutResponse)){ txChar=c; writeNoResp=!p.write && p.writeWithoutResponse; }
-      }
-      if(rxChar&&txChar){ log('Service '+s.uuid); break; }
+async function openLink(){
+  if(NATIVE){
+    devName = await new Promise((res,rej)=>{ nativeWait={res,rej}; AndroidBle.connect(); });
+    return;
+  }
+  if(!navigator.bluetooth) throw new Error('เบราว์เซอร์นี้ไม่รองรับ Web Bluetooth — ใช้ Chrome บน Android และเปิดผ่าน https');
+  status('กำลังค้นหาอุปกรณ์...');
+  device = await navigator.bluetooth.requestDevice({acceptAllDevices:true, optionalServices:SERVICES});
+  device.addEventListener('gattserverdisconnected', onDisconnect);
+  devName = device.name||'OBD';
+  status('กำลังเชื่อมต่อ '+devName+'...');
+  const server = await device.gatt.connect();
+  for(const s of await server.getPrimaryServices()){
+    for(const c of await s.getCharacteristics()){
+      const p=c.properties;
+      if(!rxChar && (p.notify||p.indicate)) rxChar=c;
+      if(!txChar && (p.write||p.writeWithoutResponse)){ txChar=c; writeNoResp=!p.write && p.writeWithoutResponse; }
     }
-    if(!rxChar||!txChar) throw new Error('ไม่พบช่องรับส่งข้อมูลของ OBD ในอุปกรณ์นี้');
-    log('RX '+rxChar.uuid+'  TX '+txChar.uuid);
-    await rxChar.startNotifications();
-    rxChar.addEventListener('characteristicvaluechanged', onData);
+    if(rxChar&&txChar){ log('Service '+s.uuid); break; }
+  }
+  if(!rxChar||!txChar) throw new Error('ไม่พบช่องรับส่งข้อมูลของ OBD ในอุปกรณ์นี้');
+  log('RX '+rxChar.uuid+'  TX '+txChar.uuid);
+  await rxChar.startNotifications();
+  rxChar.addEventListener('characteristicvaluechanged', e=>handleText(new TextDecoder().decode(e.target.value)));
+}
+
+async function connect(){
+  $('btnConnect').disabled=true;
+  try{
+    await openLink();
     await initElm();
-    $('btnConnect').disabled=true; $('btnStop').disabled=false; $('btnDtc').disabled=false; $('btnClear').disabled=false;
-    try{ wakeLock = await navigator.wakeLock?.request('screen'); }catch(e){}
+    $('btnStop').disabled=false; $('btnDtc').disabled=false; $('btnClear').disabled=false;
+    if(!NATIVE){ try{ wakeLock = await navigator.wakeLock?.request('screen'); }catch(e){} }
     running=true; loop();
-  }catch(e){ status('เชื่อมต่อไม่สำเร็จ: '+e.message); log('ERR '+e.message); }
+  }catch(e){
+    status('เชื่อมต่อไม่สำเร็จ: '+e.message); log('ERR '+e.message);
+    $('btnConnect').disabled=false;
+  }
 }
 
 function onDisconnect(){
   running=false; rxChar=txChar=null;
-  status('หลุดการเชื่อมต่อ');
+  if(pending){ const p=pending; pending=null; clearTimeout(p.t); p.res('TIMEOUT'); }
+  status('หลุดการเชื่อมต่อ — กด "เชื่อมต่อ" อีกครั้ง');
   $('btnConnect').disabled=false; $('btnStop').disabled=true; $('btnDtc').disabled=true; $('btnClear').disabled=true;
 }
 
-function onData(e){
-  buf += new TextDecoder().decode(e.target.value);
+function handleText(str){
+  buf += str;
   if(buf.includes('>') && pending){
     const out = buf.split('>')[0]; buf='';
     const p=pending; pending=null; clearTimeout(p.t); p.res(out);
   }
 }
 
-async function send(cmd, timeout=4000){
-  while(pending) await new Promise(r=>setTimeout(r,10));
-  buf='';
-  const data = new TextEncoder().encode(cmd+'\r');
-  const prom = new Promise((res,rej)=>{ pending={res,t:setTimeout(()=>{pending=null;res('TIMEOUT');},timeout)}; });
+async function writeRaw(text){
+  if(NATIVE){ AndroidBle.write(text); return; }
+  const data = new TextEncoder().encode(text);
   for(let i=0;i<data.length;i+=20){
     const chunk=data.slice(i,i+20);
     writeNoResp ? await txChar.writeValueWithoutResponse(chunk) : await txChar.writeValue(chunk);
   }
+}
+
+async function send(cmd, timeout=4000){
+  while(pending) await new Promise(r=>setTimeout(r,10));
+  buf='';
+  const prom = new Promise(res=>{ pending={res,t:setTimeout(()=>{pending=null;res('TIMEOUT');},timeout)}; });
+  await writeRaw(cmd+'\r');
   const r = (await prom).replace(/\r/g,'\n').split('\n').map(s=>s.trim()).filter(Boolean);
   log('> '+cmd+'  '+r.join(' | '));
   return r;
@@ -169,7 +200,7 @@ async function initElm(){
   const n = parseInt(dp.replace('A',''),16);
   isCan = n>=6 && n<=9;
   $('info').textContent = `${id[0]||''} · โปรโตคอล ${dp} · แบต ${v[0]||'-'}`;
-  status('เชื่อมต่อแล้ว: '+(device.name||'OBD'),true);
+  status('เชื่อมต่อแล้ว: '+devName,true);
 }
 
 // ---------- อ่านค่า ----------
@@ -206,7 +237,9 @@ async function loop(){
   }
 }
 
-$('btnStop').onclick=()=>{ running=false; device?.gatt?.disconnect(); };
+$('btnStop').onclick=()=>{ running=false; NATIVE ? AndroidBle.disconnect() : device?.gatt?.disconnect(); };
+$('btnForget').onclick=()=>{ if(NATIVE){ AndroidBle.forget(); status('ลืมอุปกรณ์แล้ว — กด "เชื่อมต่อ" เพื่อสแกนใหม่'); } };
+if(NATIVE){ $('btnForget').style.display=''; const n=AndroidBle.savedName(); $('status').textContent = n ? 'กด "เชื่อมต่อ" เพื่อต่อกับ '+n : 'ติดเครื่องรถ ปิดแอพ OBD อื่น แล้วกด "เชื่อมต่อ"'; }
 $('btnConnect').onclick=connect;
 
 // ---------- DTC ----------
