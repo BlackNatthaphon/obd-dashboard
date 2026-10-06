@@ -1,0 +1,249 @@
+<!doctype html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>OBD Dashboard</title>
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#0d1117">
+<style>
+  :root{--bg:#0d1117;--card:#161b22;--line:#30363d;--fg:#e6edf3;--mut:#8b949e;--acc:#2f81f7;--ok:#3fb950;--warn:#d29922;--bad:#f85149}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--fg);font-family:system-ui,-apple-system,"Segoe UI",sans-serif}
+  header{display:flex;flex-wrap:wrap;gap:10px;align-items:center;padding:14px 16px;border-bottom:1px solid var(--line);position:sticky;top:0;background:var(--bg);z-index:2}
+  h1{font-size:18px;margin:0;flex:1}
+  button{background:var(--acc);color:#fff;border:0;border-radius:10px;padding:10px 16px;font-size:15px;font-weight:600}
+  button.sec{background:var(--card);border:1px solid var(--line)}
+  button.danger{background:var(--bad)}
+  button:disabled{opacity:.4}
+  #status{font-size:13px;color:var(--mut);width:100%}
+  .dot{display:inline-block;width:9px;height:9px;border-radius:50%;background:var(--mut);margin-right:6px}
+  .dot.on{background:var(--ok)}
+  main{padding:16px;max-width:1100px;margin:auto}
+  .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:12px}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:14px}
+  .lbl{font-size:13px;color:var(--mut)}
+  .val{font-size:38px;font-weight:700;font-variant-numeric:tabular-nums;margin-top:4px}
+  .unit{font-size:14px;color:var(--mut);margin-left:4px;font-weight:400}
+  .na .val{color:var(--line)}
+  .bar{height:6px;background:var(--line);border-radius:3px;margin-top:8px;overflow:hidden}
+  .bar i{display:block;height:100%;background:var(--acc);width:0;transition:width .3s}
+  section{margin-top:20px}
+  h2{font-size:16px;margin:0 0 10px}
+  .row{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px}
+  .dtc{font-family:ui-monospace,monospace;font-size:20px;padding:6px 10px;background:var(--bg);border:1px solid var(--warn);color:var(--warn);border-radius:8px;display:inline-block;margin:4px}
+  #log{font-family:ui-monospace,monospace;font-size:12px;color:var(--mut);background:#010409;border:1px solid var(--line);border-radius:10px;padding:10px;height:200px;overflow:auto;white-space:pre-wrap;display:none}
+  .hint{font-size:13px;color:var(--mut);line-height:1.6}
+</style>
+</head>
+<body>
+<header>
+  <h1><span class="dot" id="dot"></span>OBD Dashboard</h1>
+  <button id="btnConnect">เชื่อมต่อ</button>
+  <button id="btnStop" class="sec" disabled>หยุด</button>
+  <div id="status">ยังไม่เชื่อมต่อ — ปิดแอพ YMOBD ก่อน แล้วกด "เชื่อมต่อ"</div>
+</header>
+<main>
+  <div class="grid" id="grid"></div>
+
+  <section>
+    <h2>รหัสข้อผิดพลาด (DTC)</h2>
+    <div class="row">
+      <button id="btnDtc" class="sec" disabled>อ่านรหัส</button>
+      <button id="btnClear" class="danger" disabled>ล้างรหัส / ดับไฟโชว์</button>
+    </div>
+    <div id="dtc" class="hint">ยังไม่ได้อ่าน</div>
+  </section>
+
+  <section>
+    <div class="row">
+      <button id="btnLog" class="sec">แสดง/ซ่อน Log</button>
+      <span class="hint" id="info"></span>
+    </div>
+    <div id="log"></div>
+  </section>
+</main>
+
+<script>
+// ---------- ค่าที่จะอ่าน (OBD-II Mode 01) ----------
+const PIDS = [
+  {pid:'0C', name:'รอบเครื่อง',      unit:'rpm', max:7000, f:b=>(b[0]*256+b[1])/4, d:0},
+  {pid:'0D', name:'ความเร็ว',       unit:'km/h',max:220,  f:b=>b[0], d:0},
+  {pid:'05', name:'อุณหภูมิน้ำ',     unit:'°C',  max:130,  f:b=>b[0]-40, d:0},
+  {pid:'04', name:'โหลดเครื่อง',    unit:'%',   max:100,  f:b=>b[0]*100/255, d:0},
+  {pid:'11', name:'ลิ้นปีกผีเสื้อ',   unit:'%',   max:100,  f:b=>b[0]*100/255, d:0},
+  {pid:'0F', name:'อุณหภูมิอากาศเข้า',unit:'°C',  max:80,   f:b=>b[0]-40, d:0},
+  {pid:'0B', name:'แรงดันท่อร่วม',   unit:'kPa', max:255,  f:b=>b[0], d:0},
+  {pid:'10', name:'MAF',            unit:'g/s', max:200,  f:b=>(b[0]*256+b[1])/100, d:1},
+  {pid:'2F', name:'น้ำมันเหลือ',     unit:'%',   max:100,  f:b=>b[0]*100/255, d:0},
+  {pid:'42', name:'แรงดันไฟ ECU',    unit:'V',   max:16,   f:b=>(b[0]*256+b[1])/1000, d:1},
+  {pid:'06', name:'Fuel trim สั้น',  unit:'%',   max:100,  f:b=>b[0]*100/128-100, d:1},
+  {pid:'07', name:'Fuel trim ยาว',   unit:'%',   max:100,  f:b=>b[0]*100/128-100, d:1},
+  {pid:'5B', name:'แบตไฮบริด',       unit:'%',   max:100,  f:b=>b[0]*100/255, d:0},
+];
+const FAST = new Set(['0C','0D','04','11','0B','10']); // อ่านทุกรอบ ที่เหลืออ่านทุก 5 รอบ
+
+// UUID ที่ตัว ELM327 BLE ใช้บ่อย
+const SERVICES = [0xfff0, 0xffe0, 0x18f0, 'e7810a71-73ae-499d-8c15-faa9aef0c3f2'];
+
+const $ = id => document.getElementById(id);
+const grid = $('grid');
+PIDS.forEach(p=>{
+  p.el = document.createElement('div');
+  p.el.className='card na';
+  p.el.innerHTML=`<div class="lbl">${p.name}</div><div class="val">--<span class="unit">${p.unit}</span></div><div class="bar"><i></i></div>`;
+  grid.appendChild(p.el);
+});
+
+let device, rxChar, txChar, writeNoResp=false, buf='', pending=null, running=false, isCan=true, wakeLock;
+
+function log(s){ const l=$('log'); l.textContent += s+'\n'; l.scrollTop=l.scrollHeight; }
+function status(s,on){ $('status').textContent=s; $('dot').classList.toggle('on',!!on); }
+$('btnLog').onclick=()=>{ const l=$('log'); l.style.display = l.style.display==='block'?'none':'block'; };
+
+// ---------- Bluetooth ----------
+async function connect(){
+  if(!navigator.bluetooth){ status('เบราว์เซอร์นี้ไม่รองรับ Web Bluetooth — ใช้ Chrome บน Android และเปิดผ่าน https'); return; }
+  try{
+    status('กำลังค้นหาอุปกรณ์...');
+    device = await navigator.bluetooth.requestDevice({acceptAllDevices:true, optionalServices:SERVICES});
+    device.addEventListener('gattserverdisconnected', onDisconnect);
+    status('กำลังเชื่อมต่อ '+(device.name||'')+'...');
+    const server = await device.gatt.connect();
+    const services = await server.getPrimaryServices();
+    for(const s of services){
+      for(const c of await s.getCharacteristics()){
+        const p=c.properties;
+        if(!rxChar && (p.notify||p.indicate)) rxChar=c;
+        if(!txChar && (p.write||p.writeWithoutResponse)){ txChar=c; writeNoResp=!p.write && p.writeWithoutResponse; }
+      }
+      if(rxChar&&txChar){ log('Service '+s.uuid); break; }
+    }
+    if(!rxChar||!txChar) throw new Error('ไม่พบช่องรับส่งข้อมูลของ OBD ในอุปกรณ์นี้');
+    log('RX '+rxChar.uuid+'  TX '+txChar.uuid);
+    await rxChar.startNotifications();
+    rxChar.addEventListener('characteristicvaluechanged', onData);
+    await initElm();
+    $('btnConnect').disabled=true; $('btnStop').disabled=false; $('btnDtc').disabled=false; $('btnClear').disabled=false;
+    try{ wakeLock = await navigator.wakeLock?.request('screen'); }catch(e){}
+    running=true; loop();
+  }catch(e){ status('เชื่อมต่อไม่สำเร็จ: '+e.message); log('ERR '+e.message); }
+}
+
+function onDisconnect(){
+  running=false; rxChar=txChar=null;
+  status('หลุดการเชื่อมต่อ');
+  $('btnConnect').disabled=false; $('btnStop').disabled=true; $('btnDtc').disabled=true; $('btnClear').disabled=true;
+}
+
+function onData(e){
+  buf += new TextDecoder().decode(e.target.value);
+  if(buf.includes('>') && pending){
+    const out = buf.split('>')[0]; buf='';
+    const p=pending; pending=null; clearTimeout(p.t); p.res(out);
+  }
+}
+
+async function send(cmd, timeout=4000){
+  while(pending) await new Promise(r=>setTimeout(r,10));
+  buf='';
+  const data = new TextEncoder().encode(cmd+'\r');
+  const prom = new Promise((res,rej)=>{ pending={res,t:setTimeout(()=>{pending=null;res('TIMEOUT');},timeout)}; });
+  for(let i=0;i<data.length;i+=20){
+    const chunk=data.slice(i,i+20);
+    writeNoResp ? await txChar.writeValueWithoutResponse(chunk) : await txChar.writeValue(chunk);
+  }
+  const r = (await prom).replace(/\r/g,'\n').split('\n').map(s=>s.trim()).filter(Boolean);
+  log('> '+cmd+'  '+r.join(' | '));
+  return r;
+}
+
+async function initElm(){
+  status('กำลังตั้งค่า ELM327...',true);
+  await send('ATZ',6000);
+  for(const c of ['ATE0','ATL0','ATS0','ATH0','ATAT1','ATSP0']) await send(c);
+  const id = await send('ATI'); const v = await send('ATRV');
+  status('กำลังหาโปรโตคอลรถ (ครั้งแรกอาจใช้ 5-10 วินาที)...',true);
+  await send('0100',15000);
+  const dp = (await send('ATDPN'))[0]||'';
+  const n = parseInt(dp.replace('A',''),16);
+  isCan = n>=6 && n<=9;
+  $('info').textContent = `${id[0]||''} · โปรโตคอล ${dp} · แบต ${v[0]||'-'}`;
+  status('เชื่อมต่อแล้ว: '+(device.name||'OBD'),true);
+}
+
+// ---------- อ่านค่า ----------
+function parse(lines, pid){
+  const want='41'+pid;
+  for(const l of lines){
+    const h=l.replace(/\s/g,'').toUpperCase();
+    const i=h.indexOf(want);
+    if(i>=0){ const bytes=[]; for(let j=i+4;j+1<h.length;j+=2) bytes.push(parseInt(h.substr(j,2),16)); return bytes; }
+  }
+  return null;
+}
+
+async function loop(){
+  let n=0;
+  while(running){
+    for(const p of PIDS){
+      if(!running) break;
+      if(p.retryAt && n<p.retryAt) continue;          // เครื่องดับ (โหมด EV) ค่าบางตัวจะหายไป ลองใหม่ทีหลัง
+      if(!FAST.has(p.pid) && n%5) continue;
+      const r = await send('01'+p.pid);
+      const b = parse(r,p.pid);
+      if(!b || b.some(isNaN)){
+        if(r.join().includes('NO DATA')) { p.retryAt=n+15; p.el.classList.add('na'); p.el.querySelector('.val').firstChild.textContent='--'; }
+        continue;
+      }
+      p.retryAt=0;
+      const v=p.f(b);
+      p.el.classList.remove('na');
+      p.el.querySelector('.val').firstChild.textContent=v.toFixed(p.d);
+      p.el.querySelector('.bar i').style.width=Math.max(0,Math.min(100,Math.abs(v)/p.max*100))+'%';
+    }
+    n++;
+  }
+}
+
+$('btnStop').onclick=()=>{ running=false; device?.gatt?.disconnect(); };
+$('btnConnect').onclick=connect;
+
+// ---------- DTC ----------
+function decodeDtc(a,b){
+  const t='PCBU'[a>>6];
+  return t + ((a>>4)&3) + (a&15).toString(16) + (b>>4).toString(16) + (b&15).toString(16);
+}
+async function readDtc(){
+  const was=running; running=false; await new Promise(r=>setTimeout(r,300));
+  $('dtc').textContent='กำลังอ่าน...';
+  const r = await send('03',8000);
+  const codes=[];
+  for(let l of r){
+    l=l.replace(/\s/g,'').toUpperCase().replace(/^[0-9A-F]:/,'');
+    if(/^[0-9A-F]{3}$/.test(l)) continue;           // บรรทัดความยาว multi-frame
+    let h=l; const i=h.indexOf('43'); if(i===0) h=h.slice(2+(isCan?2:0));
+    for(let j=0;j+3<h.length;j+=4){
+      const a=parseInt(h.substr(j,2),16), b=parseInt(h.substr(j+2,2),16);
+      if(isNaN(a)||isNaN(b)||(a===0&&b===0)) continue;
+      codes.push(decodeDtc(a,b).toUpperCase());
+    }
+  }
+  const uniq=[...new Set(codes)];
+  $('dtc').innerHTML = r.join().includes('NO DATA') || !uniq.length
+    ? '<span style="color:var(--ok)">✓ ไม่พบรหัสข้อผิดพลาด</span>'
+    : uniq.map(c=>`<span class="dtc">${c}</span>`).join('') + '<div class="hint">ค้นหาความหมายรหัสได้จาก Google เช่น "P0171 BMW"</div>';
+  if(was){ running=true; loop(); }
+}
+async function clearDtc(){
+  if(!confirm('ล้างรหัสข้อผิดพลาดทั้งหมด?\nควรดับเครื่องแต่เปิดสวิตช์ไว้ และรหัสจะกลับมาถ้าปัญหายังไม่ถูกแก้')) return;
+  const was=running; running=false; await new Promise(r=>setTimeout(r,300));
+  const r=await send('04',8000);
+  $('dtc').textContent = r.join().includes('44') ? 'ล้างรหัสแล้ว' : 'ล้างไม่สำเร็จ: '+r.join(' ');
+  if(was){ running=true; loop(); }
+}
+$('btnDtc').onclick=readDtc;
+$('btnClear').onclick=clearDtc;
+</script>
+</body>
+</html>
