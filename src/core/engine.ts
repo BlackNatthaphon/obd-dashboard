@@ -4,7 +4,7 @@ import { SRC, type Source } from '../obd/catalog';
 import { Elm, now, type DtcResult, type ElmInfo, type StatusResult, type Transport } from '../obd/elm';
 import { openBle, scanDevices, type FoundDevice } from '../obd/ble';
 import { createSimTransport } from '../obd/sim';
-import { beep, buzz } from './feedback';
+import { beep, buzz, toneOff, toneOn } from './feedback';
 import { GearEstimator } from './gear';
 import { Race } from './race';
 import { curDash, setSettings, settings, type RaceRun, type Trip } from './settings';
@@ -70,6 +70,9 @@ function wantList(): string[] {
 
 function period(id: string): number {
   if (page === 'race' || hudOn) return id === '0D' || id === '0C' ? 0 : 3000;
+  // เสียงเตือนเปลี่ยนเกียร์ต้องรู้รอบเร็วๆ ทุกหน้า → ให้รอบได้คิวก่อน (ค่าติดลบ = ถึงคิวเร็วกว่าตัวอื่น)
+  // ยิ่งใกล้จุดเปลี่ยนเกียร์ยิ่งอ่านถี่ (เกือบทุกจังหวะ) ตอนรอบต่ำไม่ต้องแย่งคิวค่าอื่นมาก
+  if (id === '0C' && settings.get().shiftBeep) return (V['0C']?.v ?? 0) > settings.get().shiftRpm - 1500 ? -5000 : -400;
   if (page === 'live') return id === 'RV' ? 2000 : 0;
   const s = SRC[id];
   if (id === 'RV' || id === '33' || s.cat === 'info') return 4000;
@@ -197,19 +200,18 @@ function onSample(id: string, v: number, t: number) {
   if (maf != null) setVal('POW', maf * 1.32, t);
 }
 
-// เสียงเตือนเปลี่ยนเกียร์: ตี๊ดดดยาวตอนรอบแตะจุดเปลี่ยนเกียร์ แล้วดังซ้ำทุก ~1 วิ ถ้ายังไม่เปลี่ยน
-let shiftBeepT = 0, aboveShift = false;
+// เสียงเตือนเปลี่ยนเกียร์: ตี๊ดดดค้างไว้ตลอดที่รอบยังเกินจุดเปลี่ยนเกียร์ เงียบทันทีที่เปลี่ยนเกียร์ (รอบตก)
+// ถ้าค่ารอบไม่เข้ามาเกิน 2 วิ (หลุดการเชื่อมต่อ) ให้หยุดเอง จะได้ไม่ค้าง
+let shiftStopT: ReturnType<typeof setTimeout> | undefined;
+let aboveShift = false;
+export function stopShiftTone() { clearTimeout(shiftStopT); aboveShift = false; toneOff(); }
 function shiftCheck(rpm: number) {
   const s = settings.get();
-  if (rpm < s.shiftRpm - 200) { aboveShift = false; return; }
-  if (rpm < s.shiftRpm || !s.shiftBeep) return;
-  const t = now();
-  if (!aboveShift || t - shiftBeepT > 1000) {
-    if (!aboveShift) buzz(120);
-    aboveShift = true;
-    shiftBeepT = t;
-    beep('shift', 1, true);
-  }
+  if (!s.shiftBeep || rpm < s.shiftRpm - 100) { if (aboveShift) stopShiftTone(); return; }
+  if (rpm < s.shiftRpm && !aboveShift) return;
+  if (!aboveShift) { aboveShift = true; buzz(120); toneOn('shiftLoop'); }
+  clearTimeout(shiftStopT);
+  shiftStopT = setTimeout(stopShiftTone, 2000);
 }
 
 // ---------- จับเวลา ----------
@@ -286,6 +288,7 @@ export function disconnect() { elm.close(); }
 elm.onLost = () => {
   if (session.get().state === 'connecting') return;
   if (rec) stopRec();
+  stopShiftTone();
   race.reset();
   setSettings({trip: {...trip}, gearHist: gear.hist.slice()});
   session.set({state: 'idle', hz: 0, status: msg('st.disconnected')});
