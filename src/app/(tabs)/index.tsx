@@ -4,7 +4,7 @@ import { useCallback, useState } from 'react';
 import { BackHandler, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import Svg, { Circle, Path } from 'react-native-svg';
 import { t as tr } from '../../i18n';
-import { dashName, defaultType, PRESETS, SRC, type WidgetType } from '../../obd/catalog';
+import { dashName, defaultType, PRESETS, SRC, type Dash, type WidgetType } from '../../obd/catalog';
 import { connect, session, setPage } from '../../core/engine';
 import { curDash, setSettings, settings, updateDash, useSettings } from '../../core/settings';
 import { useStore } from '../../core/store';
@@ -17,6 +17,16 @@ import { WidgetView, type WidgetAction } from '../../ui/WidgetView';
 const TYPES: WidgetType[] = ['num', 'bar', 'gauge', 'graph'];
 const GAP = 10, PAD = 12;
 const clone = <T,>(o: T): T => JSON.parse(JSON.stringify(o));
+
+/** id → ชื่อหน้าแดชอื่นๆ ที่มีค่านี้อยู่ */
+function usedElsewhere(dashes: Dash[], cur: number): Record<string, string[]> {
+  const out: Record<string, string[]> = {};
+  dashes.forEach((d, i) => {
+    if (i === cur) return;
+    for (const id of new Set(d.widgets.map(w => w.id))) (out[id] ??= []).push(dashName(d));
+  });
+  return out;
+}
 
 export default function Dashboard() {
   const t = useTheme();
@@ -113,6 +123,7 @@ export default function Dashboard() {
       {!dash.widgets.length && !editing && <Hint style={{textAlign: 'center', marginTop: 20}}>{tr('dash.empty')}</Hint>}
 
       <SourcePicker visible={adding} title={tr('dash.addWidgetTitle')} onClose={() => setAdding(false)}
+        here={dash.widgets.map(w => w.id)} elsewhere={usedElsewhere(cfg.dash, cfg.dashIdx)}
         onPick={id => updateDash(d => ({...d, widgets: [...d.widgets, {id, type: defaultType(SRC[id]), size: 1}]}))} />
       {prompt && <TextPrompt visible title={prompt === 'new' ? tr('dash.newName') : tr('dash.renameTitle')}
         initial={prompt === 'new' ? tr('dash.pageN', {n: settings.get().dash.length + 1}) : dashName(dash)} onDone={onPrompt} />}

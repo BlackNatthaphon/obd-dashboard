@@ -2,7 +2,7 @@
 import { useMemo, useState } from 'react';
 import { KeyboardAvoidingView, Modal, Platform, Pressable, SectionList, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { t as tr } from '../i18n';
+import { t as tr, type Key } from '../i18n';
 import { CATEGORIES, catName, SRC, srcName } from '../obd/catalog';
 import { isSupported, pickDevice, session } from '../core/engine';
 import { useStore } from '../core/store';
@@ -28,8 +28,12 @@ export function Sheet({visible, title, onClose, children}: { visible: boolean; t
   );
 }
 
-/** เลือกค่าที่จะแสดง (จัดกลุ่มตามหมวด + ค้นหา) */
-export function SourcePicker({visible, title, onPick, onClose}: { visible: boolean; title: string; onPick: (id: string) => void; onClose: () => void }) {
+/** เลือกค่าที่จะแสดง (จัดกลุ่มตามหมวด + ค้นหา)
+ * here = ค่าที่อยู่ในหน้านี้แล้ว (ขึ้น ✓), elsewhere = id → ชื่อหน้าอื่นที่ใช้ค่านี้ */
+export function SourcePicker({visible, title, onPick, onClose, here = [], hereLabel = 'pick.here', elsewhere = {}}: {
+  visible: boolean; title: string; onPick: (id: string) => void; onClose: () => void;
+  here?: string[]; hereLabel?: Key; elsewhere?: Record<string, string[]>;
+}) {
   const t = useTheme();
   const [q, setQ] = useState('');
   const sections = useMemo(() => {
@@ -47,15 +51,22 @@ export function SourcePicker({visible, title, onPick, onClose}: { visible: boole
         renderSectionHeader={({section}) => <Text style={[st.cat, {color: t.acc, backgroundColor: t.bg}]}>{section.title}</Text>}
         renderItem={({item: s}) => {
           const ok = isSupported(s.id);
+          const n = here.filter(x => x === s.id).length;
+          const other = elsewhere[s.id] ?? [];
           return (
-            <Pressable onPress={() => { onPick(s.id); onClose(); }} style={[st.it, {borderColor: t.line, opacity: ok ? 1 : 0.45}]}>
+            <Pressable onPress={() => { onPick(s.id); onClose(); }}
+              style={[st.it, {borderColor: t.line, opacity: ok ? 1 : 0.45}, n > 0 && {backgroundColor: t.card}]}>
               <View style={{flex: 1}}>
-                <Text style={{color: t.fg, fontSize: 14}}>{srcName(s)}</Text>
+                <Text style={{color: t.fg, fontSize: 14, fontWeight: n ? '700' : '400'}}>{srcName(s)}</Text>
                 <Text style={{color: t.mut, fontSize: 11}}>
                   {[s.unit, s.mode1 ? 'PID ' + s.id : '', ok ? '' : tr('pick.unsupported'), s.note ? tr(s.note) : ''].filter(Boolean).join(' · ')}
                 </Text>
+                {n > 0 && <Text style={{color: t.ok, fontSize: 11.5, fontWeight: '600'}}>✓ {tr(hereLabel)}{n > 1 ? ` ×${n}` : ''}</Text>}
+                {other.length > 0 && <Text style={{color: t.acc2, fontSize: 11.5}}>{tr('pick.onPages', {pages: other.join(', ')})}</Text>}
               </View>
-              <Text style={{color: t.acc, fontSize: 22, fontWeight: '700'}}>+</Text>
+              {n > 0
+                ? <View style={[st.badge, {backgroundColor: t.ok}]}><Text style={{color: '#fff', fontSize: 14, fontWeight: '800'}}>✓</Text></View>
+                : <Text style={{color: t.acc, fontSize: 22, fontWeight: '700'}}>+</Text>}
             </Pressable>
           );
         }} />
@@ -100,5 +111,6 @@ const st = StyleSheet.create({
   hd: {flexDirection: 'row', alignItems: 'center', paddingTop: 12, paddingBottom: 8},
   input: {borderWidth: 1, borderRadius: 10, paddingHorizontal: 12, paddingVertical: 10, fontSize: 15, marginBottom: 6},
   cat: {fontSize: 12, fontWeight: '700', paddingTop: 14, paddingBottom: 4, letterSpacing: 0.5},
-  it: {flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 11, paddingHorizontal: 4, borderBottomWidth: 1},
+  it: {flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 11, paddingHorizontal: 6, borderBottomWidth: 1, borderRadius: 6},
+  badge: {width: 26, height: 26, borderRadius: 13, alignItems: 'center', justifyContent: 'center'},
 });

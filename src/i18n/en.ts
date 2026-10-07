@@ -73,6 +73,9 @@ const en: Dict = {
 
   'pick.unsupported': 'not supported by this car',
   'note.maf': 'rough estimate from MAF',
+  'pick.here': 'Already on this page',
+  'pick.inGraph': 'Already in the graph',
+  'pick.onPages': 'On: {pages}',
 
   'race.choose': 'Pick a mode, then tap “Ready”',
   'race.connectFirst': 'Connect to the car first (or use demo mode)',

@@ -53,6 +53,7 @@ export default function Graph() {
         <Hint>{tr('graph.hint')}</Hint>
       </View>
       <SourcePicker visible={adding} title={tr('graph.addTitle')} onClose={() => setAdding(false)}
+        here={cfg.graph} hereLabel="pick.inGraph"
         onPick={id => setSettings(s => ({graph: s.graph.includes(id) ? s.graph : [...s.graph, id].slice(0, 4)}))} />
     </ScrollView>
   );

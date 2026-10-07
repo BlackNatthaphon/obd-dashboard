@@ -5,7 +5,7 @@ import { Pressable, SectionList, StyleSheet, Text, TextInput, View } from 'react
 import { t as tr } from '../../i18n';
 import { CATEGORIES, catName, dashName, defaultType, fmtDur, fmtVal, isAlarm, SRC, srcName } from '../../obd/catalog';
 import { lph, resetTrip, session, setPage, trip } from '../../core/engine';
-import { curDash, updateDash } from '../../core/settings';
+import { curDash, updateDash, useSettings } from '../../core/settings';
 import { useStore } from '../../core/store';
 import { useFrame, V, val } from '../../core/values';
 import { Btn, Card, H2, Hint } from '../../ui/kit';
@@ -16,6 +16,7 @@ export default function Live() {
   const ses = useStore(session);
   const [q, setQ] = useState('');
   const [toast, setToast] = useState('');
+  const onDash = new Set(curDash(useSettings()).widgets.map(w => w.id));
   const tick = useFrame(250);
   useFocusEffect(useCallback(() => { setPage('live'); }, []));
 
@@ -77,11 +78,14 @@ export default function Live() {
               {fmtVal(s, v)}<Text style={{color: t.mut, fontSize: 11, fontWeight: '400'}}> {s.unit}</Text>
             </Text>
             <Pressable hitSlop={8} accessibilityLabel={tr('live.addToDash')} onPress={() => {
-              updateDash(d => ({...d, widgets: [...d.widgets, {id: s.id, type: defaultType(s), size: 1}]}));
-              setToast(tr('live.added', {name: srcName(s), dash: dashName(curDash())}));
+              if (onDash.has(s.id)) setToast(`${srcName(s)}: ${tr('pick.here')} (${dashName(curDash())})`);
+              else {
+                updateDash(d => ({...d, widgets: [...d.widgets, {id: s.id, type: defaultType(s), size: 1}]}));
+                setToast(tr('live.added', {name: srcName(s), dash: dashName(curDash())}));
+              }
               setTimeout(() => setToast(''), 2000);
             }} style={{paddingHorizontal: 8}}>
-              <Text style={{color: t.mut, fontSize: 20}}>☆</Text>
+              <Text style={{color: onDash.has(s.id) ? t.warn : t.mut, fontSize: 20}}>{onDash.has(s.id) ? '★' : '☆'}</Text>
             </Pressable>
           </View>
         );
