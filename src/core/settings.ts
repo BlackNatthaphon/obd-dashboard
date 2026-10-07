@@ -23,6 +23,8 @@ export interface Settings {
   redline: number;
   fuel: 'gas' | 'diesel';
   sound: boolean;
+  /** เสียงเตือนเปลี่ยนเกียร์ (ทุกหน้า) */
+  shiftBeep: boolean;
   vibrate: boolean;
   hudMirror: boolean;
   raceMode: string;
@@ -32,14 +34,16 @@ export interface Settings {
   orient: Orientation;
   trip: Trip;
   device: { id: string; name: string } | null;
+  /** สถิติที่ใช้เดาเกียร์ (เรียนรู้ระหว่างขับ) */
+  gearHist: number[] | null;
 }
 
 const clone = <T,>(o: T): T => JSON.parse(JSON.stringify(o));
 
 export const DEFAULTS: Settings = {
   lang: 'auto', theme: 'midnight', dash: clone(PRESETS), dashIdx: 0, shiftRpm: 6000, redline: 6500, fuel: 'gas',
-  sound: true, vibrate: true, hudMirror: false, raceMode: '0-100', runs: [], graph: ['0C', '0D', '11'], graphWin: 60,
-  orient: 'auto', trip: {dist: 0, time: 0, fuel: 0, max: 0}, device: null,
+  sound: true, shiftBeep: true, vibrate: true, hudMirror: false, raceMode: '0-100', runs: [], graph: ['0C', '0D', '11'], graphWin: 60,
+  orient: 'auto', trip: {dist: 0, time: 0, fuel: 0, max: 0}, device: null, gearHist: null,
 };
 
 const KEY = 'obd-dashboard/settings';

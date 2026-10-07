@@ -9,6 +9,7 @@ const SOURCES = {
   1200: require('../../assets/sounds/beep1200.wav'),
   1400: require('../../assets/sounds/beep1400.wav'),
   1600: require('../../assets/sounds/beep1600.wav'),
+  shift: require('../../assets/sounds/shift.wav'),
 };
 export type Tone = keyof typeof SOURCES;
 
@@ -19,8 +20,9 @@ function player(tone: Tone): AudioPlayer | null {
   catch { return null; }
 }
 
-export function beep(tone: Tone, times = 1) {
-  if (!settings.get().sound) return;
+/** force = เล่นแม้ปิดเสียงบี๊บทั่วไป (ใช้กับเสียงเตือนเปลี่ยนเกียร์ที่มีสวิตช์ของตัวเอง) */
+export function beep(tone: Tone, times = 1, force = false) {
+  if (!force && !settings.get().sound) return;
   for (let i = 0; i < times; i++) {
     setTimeout(() => {
       const p = player(tone);

@@ -16,8 +16,8 @@ function arc(p0: number, p1: number) {
   return `M${x0.toFixed(2)} ${y0.toFixed(2)}A${R} ${R} 0 ${a1 - a0 > 180 ? 1 : 0} 1 ${x1.toFixed(2)} ${y1.toFixed(2)}`;
 }
 
-export function Gauge({src, v, width, labels, red, alarm}: {
-  src: Source; v: number | null; width: number; labels: boolean; red?: number | null; alarm?: boolean;
+export function Gauge({src, v, width, labels, red, mark, alarm}: {
+  src: Source; v: number | null; width: number; labels: boolean; red?: number | null; mark?: number | null; alarm?: boolean;
 }) {
   const t = useTheme();
   const p = v == null ? 0 : Math.max(0, Math.min(1, (v - src.min) / (src.max - src.min)));
@@ -36,12 +36,16 @@ export function Gauge({src, v, width, labels, red, alarm}: {
     }
   }
   const [nx, ny] = pt(START + SWEEP * p, 52);
+  // ขีดสีเหลืองตรงรอบที่ควรเปลี่ยนเกียร์
+  const mp = mark != null ? Math.max(0, Math.min(1, (mark - src.min) / (src.max - src.min))) : null;
+  const [mx1, my1] = mp != null ? pt(START + SWEEP * mp, 66) : [0, 0], [mx2, my2] = mp != null ? pt(START + SWEEP * mp, 90) : [0, 0];
   return (
     <Svg width={width} height={width * 0.86} viewBox="0 0 200 172">
       <Path d={arc(0, 1)} stroke={t.card2} strokeWidth={12} strokeLinecap="round" fill="none" />
       {rp != null && rp < 1 && <Path d={arc(rp, 1)} stroke={t.bad} strokeOpacity={0.55} strokeWidth={12} fill="none" />}
       {p > 0.004 && <Path d={arc(0, p)} stroke={col} strokeWidth={12} strokeLinecap="round" fill="none" />}
       {ticks}
+      {mp != null && <Line x1={mx1} y1={my1} x2={mx2} y2={my2} stroke={t.warn} strokeWidth={4} strokeLinecap="round" />}
       <Line x1={CX} y1={CY} x2={nx} y2={ny} stroke={t.fg} strokeWidth={3} strokeLinecap="round" />
       <Circle cx={CX} cy={CY} r={6} fill={t.fg} />
       <SvgText x={CX} y={146} fill={alarm ? t.bad : t.fg} fontSize={30} fontWeight="700" fontFamily={FONT} textAnchor="middle">{fmtVal(src, v)}</SvgText>

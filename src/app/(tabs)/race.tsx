@@ -6,14 +6,15 @@ import { locale, t as tr, tm } from '../../i18n';
 import { RACE_MODES, raceName } from '../../obd/catalog';
 import { now } from '../../obd/elm';
 import { bestRun, race, session, setPage } from '../../core/engine';
+import { gearLabel } from '../../core/gear';
 import { lap, lapGo, lapLap, lapReset, lapTime } from '../../core/lap';
 import { setSettings, useSettings } from '../../core/settings';
 import { useStore } from '../../core/store';
 import { useFrame, val } from '../../core/values';
 import { Btn, Card, Chip, Chips, confirm, H2, Hint } from '../../ui/kit';
+import { ShiftLights } from '../../ui/ShiftLights';
 import { numFont, useTheme } from '../../ui/theme';
 
-const LEDS = 10;
 
 export default function RaceScreen() {
   const t = useTheme();
@@ -28,8 +29,6 @@ export default function RaceScreen() {
   const v = val('0D', 2000), rpm = val('0C', 2000);
   const st = race.state;
   const start = cfg.shiftRpm - 2500;
-  const lit = Math.max(0, Math.min(LEDS, Math.ceil((((rpm ?? 0) - start) / 2500) * LEDS)));
-  const flash = (rpm ?? 0) >= cfg.shiftRpm && Math.floor(now() / 150) % 2 === 0;
   const timerCol = st === 'done' ? t.ok : st === 'running' ? t.fg : t.acc;
   let msg = tm(race.msg) || (st === 'idle' ? tr('race.choose') : '');
   if (st === 'done' && race.res?.trap) msg += ' · ' + tr('race.trap', {v: race.res.trap.toFixed(0)});
@@ -53,12 +52,7 @@ export default function RaceScreen() {
       </Chips>
 
       <Card style={{alignItems: 'center', paddingVertical: 16}}>
-        <View style={s.leds}>
-          {Array.from({length: LEDS}, (_, i) => {
-            const c = flash ? '#4da3ff' : i < lit ? (i < 4 ? t.ok : i < 7 ? t.warn : t.bad) : t.card2;
-            return <View key={i} style={[s.led, {backgroundColor: c, borderColor: t.line}]} />;
-          })}
-        </View>
+        <View style={{alignSelf: 'stretch', marginBottom: 8}}><ShiftLights rpm={rpm} shiftRpm={cfg.shiftRpm} /></View>
         <Text style={[s.spd, {color: t.fg, fontFamily: numFont(t)}]}>
           {v == null ? '--' : v.toFixed(0)}<Text style={{fontSize: 18, color: t.mut, fontWeight: '500'}}> km/h</Text>
         </Text>
@@ -72,7 +66,8 @@ export default function RaceScreen() {
         </Text>
         <View style={s.sub}>
           {[[tr('race.distance'), tr('race.m', {v: (st === 'done' && race.res ? race.res.dist : race.dist).toFixed(0)})],
-            [tr('race.peakG'), Math.abs(race.g).toFixed(2)], [tr('race.rpm'), rpm == null ? '--' : rpm.toFixed(0)]].map(([a, b]) => (
+            [tr('race.peakG'), Math.abs(race.g).toFixed(2)], [tr('race.rpm'), rpm == null ? '--' : rpm.toFixed(0)],
+            [tr('race.gear'), gearLabel(val('GEAR', 2000))]].map(([a, b]) => (
             <View key={a} style={{alignItems: 'center'}}>
               <Text style={{color: t.mut, fontSize: 13}}>{a}</Text>
               <Text style={{color: t.fg, fontSize: 16, fontWeight: '700', fontVariant: ['tabular-nums']}}>{b}</Text>
@@ -140,8 +135,6 @@ export default function RaceScreen() {
 }
 
 const s = StyleSheet.create({
-  leds: {flexDirection: 'row', gap: 5, marginBottom: 8, alignSelf: 'stretch', justifyContent: 'center'},
-  led: {flex: 1, maxWidth: 34, height: 14, borderRadius: 7, borderWidth: 1},
   spd: {fontSize: 96, fontWeight: '800', fontVariant: ['tabular-nums'], lineHeight: 104},
   rpmbar: {height: 10, borderRadius: 5, overflow: 'hidden', alignSelf: 'stretch', marginTop: 8},
   tmr: {fontSize: 56, fontWeight: '700', fontVariant: ['tabular-nums'], marginTop: 8},

@@ -5,6 +5,7 @@ import { Elm, now, type DtcResult, type ElmInfo, type StatusResult, type Transpo
 import { openBle, scanDevices, type FoundDevice } from '../obd/ble';
 import { createSimTransport } from '../obd/sim';
 import { beep, buzz } from './feedback';
+import { GearEstimator } from './gear';
 import { Race } from './race';
 import { curDash, setSettings, settings, type RaceRun, type Trip } from './settings';
 import { exportCsv } from './share';
@@ -60,7 +61,7 @@ function expand(id: string, out: Set<string>) {
 function wantList(): string[] {
   const out = new Set<string>(['0D', fuelSrc()]);
   const cfg = settings.get();
-  if (hudOn || page === 'race') { out.add('0C'); }
+  if (hudOn || page === 'race' || cfg.shiftBeep) { out.add('0C'); }
   if (page === 'dash') for (const w of curDash(cfg).widgets) expand(w.id, out);
   if (page === 'live') { for (const id of elm.info.supported) if (SRC[id]) out.add(id); out.add('RV'); }
   if (page === 'graph') for (const id of cfg.graph) expand(id, out);
@@ -124,6 +125,32 @@ export function lph(): number | null {
   return settings.get().fuel === 'diesel' ? (maf * 3600) / (14.5 * 832) : (maf * 3600) / (14.7 * 745);
 }
 
+// ---------- เกียร์ ----------
+export const gear = new GearEstimator(settings.get().gearHist);
+let gearLoaded = false, gearSaveT = 0;
+settings.subscribe(() => {
+  const s = settings.get();
+  if (s.loaded && !gearLoaded) { gearLoaded = true; if (s.gearHist) { gear.hist = s.gearHist.slice(); gear.findGears(); } }
+});
+function gearSample(t: number) {
+  const a4 = val('A4', 1500);
+  if (a4 != null && a4 >= 0) { setVal('GEAR', a4, t); return; }
+  // รอบกับความเร็วอ่านคนละจังหวะ → ประมาณทั้งสองค่า ณ เวลาเดียวกันจาก 2 ค่าล่าสุด
+  const rpm = valueAt('0C', t), sp = valueAt('0D', t);
+  if (rpm == null || sp == null) return;
+  setVal('GEAR', gear.update(rpm, Math.max(0, sp)), t);
+  if (t - gearSaveT > 30000) { gearSaveT = t; gear.findGears(); setSettings({gearHist: gear.hist.slice()}); }
+}
+function valueAt(id: string, t: number): number | null {
+  const h = V[id]?.hist;
+  const b = h?.[h.length - 1];
+  if (!b || t - b[0] > 1500) return null;
+  const a = h![h!.length - 2];
+  if (!a || b[0] - a[0] > 1500 || b[0] <= a[0]) return b[1];
+  return b[1] + ((b[1] - a[1]) * (t - b[0])) / (b[0] - a[0]);
+}
+export function resetGear() { gear.reset(); setSettings({gearHist: null}); }
+
 export function resetTrip() {
   Object.assign(trip, {dist: 0, time: 0, fuel: 0, max: 0});
   setSettings({trip: {...trip}});
@@ -156,6 +183,7 @@ function onSample(id: string, v: number, t: number) {
     if (trip.fuel > 0.01) setVal('TKML', trip.dist / trip.fuel, t);
   }
   if (id === '0C') shiftCheck(v);
+  if (id === '0C' || id === '0D' || id === 'A4') gearSample(t);
   const f = lph();
   if (f != null) setVal('LPH', f, t);
   const sp = val('0D');
@@ -169,11 +197,18 @@ function onSample(id: string, v: number, t: number) {
   if (maf != null) setVal('POW', maf * 1.32, t);
 }
 
-let shiftBeepT = 0;
+// เสียงเตือนเปลี่ยนเกียร์: ตี๊ดดดยาวตอนรอบแตะจุดเปลี่ยนเกียร์ แล้วดังซ้ำทุก ~1 วิ ถ้ายังไม่เปลี่ยน
+let shiftBeepT = 0, aboveShift = false;
 function shiftCheck(rpm: number) {
-  if (rpm >= settings.get().shiftRpm && now() - shiftBeepT > 700 && (page === 'race' || hudOn)) {
-    shiftBeepT = now();
-    beep(1400);
+  const s = settings.get();
+  if (rpm < s.shiftRpm - 200) { aboveShift = false; return; }
+  if (rpm < s.shiftRpm || !s.shiftBeep) return;
+  const t = now();
+  if (!aboveShift || t - shiftBeepT > 1000) {
+    if (!aboveShift) buzz(120);
+    aboveShift = true;
+    shiftBeepT = t;
+    beep('shift', 1, true);
   }
 }
 
@@ -252,7 +287,7 @@ elm.onLost = () => {
   if (session.get().state === 'connecting') return;
   if (rec) stopRec();
   race.reset();
-  setSettings({trip: {...trip}});
+  setSettings({trip: {...trip}, gearHist: gear.hist.slice()});
   session.set({state: 'idle', hz: 0, status: msg('st.disconnected')});
 };
 

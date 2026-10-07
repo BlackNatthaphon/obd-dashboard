@@ -2,7 +2,7 @@
 import Constants from 'expo-constants';
 import { router } from 'expo-router';
 import { Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
-import { connect, disconnect, forgetDevice, session } from '../core/engine';
+import { connect, disconnect, forgetDevice, resetGear, session } from '../core/engine';
 import { DEFAULTS, setSettings, useSettings, type Orientation, type ThemeName } from '../core/settings';
 import { Btn, Chip, confirm, Hint, Stepper, Toggle } from '../ui/kit';
 import { THEMES, useTheme } from '../ui/theme';
@@ -44,6 +44,7 @@ export default function Settings() {
       </Section>
       <Section title={tr('set.timing')}>
         <Stepper label={tr('set.shift')} value={cfg.shiftRpm} step={100} min={2500} max={9000} unit="rpm" onChange={v => setSettings({shiftRpm: v})} />
+        <Toggle label={tr('set.shiftBeep')} value={cfg.shiftBeep} onChange={v => setSettings({shiftBeep: v})} />
         <Stepper label={tr('set.redline')} value={cfg.redline} step={100} min={3000} max={9500} unit="rpm" onChange={v => setSettings({redline: v})} />
       </Section>
       <Section title={tr('set.fuel')}>
@@ -78,6 +79,9 @@ export default function Settings() {
         <View style={{flexDirection: 'row', flexWrap: 'wrap', gap: 8}}>
           <Btn title={tr('set.resetDash')} onPress={async () => {
             if (await confirm(tr('set.resetDashQ'), tr('set.resetDashMsg'), tr('set.resetOk'))) setSettings({dash: clone(DEFAULTS.dash), dashIdx: 0});
+          }} />
+          <Btn title={tr('set.resetGear')} onPress={async () => {
+            if (await confirm(tr('set.resetGearQ'), tr('set.resetGearMsg'), tr('set.resetOk'))) resetGear();
           }} />
           <Btn title={tr('set.clearRuns')} onPress={async () => {
             if (await confirm(tr('race.clearQ'), tr('race.clearMsg'), tr('race.clearOk'))) setSettings({runs: []});

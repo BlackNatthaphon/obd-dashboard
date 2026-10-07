@@ -1,4 +1,5 @@
 // ค่าทั้งหมดที่แอพรู้จัก: OBD-II Mode 01, ค่าจากตัวเสียบ และค่าที่คำนวณเอง
+import { gearLabel, parseA4 } from '../core/gear';
 import { getLang, t, type Key } from '../i18n';
 
 export type Category = 'eng' | 'fuel' | 'temp' | 'elec' | 'o2' | 'trip' | 'info';
@@ -62,6 +63,7 @@ const EN: Record<string, string> = {
   '4D': 'Time with MIL on', '4E': 'Time since codes cleared', 'A6': 'Odometer',
   RV: 'Battery (at adapter)', LPH: 'Fuel rate', KML: 'Fuel economy (now)', L100: 'Fuel economy (now)', BOOST: 'Boost',
   ACC: 'G-force (accel/brake)', POW: 'Estimated power', TDIST: 'Trip distance', TTIME: 'Trip time',
+  A4: 'Transmission gear (ECU)', GEAR: 'Gear',
   TAVG: 'Trip average speed', TMAX: 'Trip max speed', TFUEL: 'Trip fuel used', TKML: 'Trip average economy',
 };
 
@@ -93,6 +95,7 @@ pid('61', 'แรงบิดที่ต้องการ', '%', -125, 130, 0,
 pid('62', 'แรงบิดจริง', '%', -125, 130, 0, 1, a => a[0] - 125, 'eng');
 pid('63', 'แรงบิดอ้างอิง', 'Nm', 0, 1000, 0, 2, w, 'eng');
 pid('1F', 'เวลาตั้งแต่ติดเครื่อง', 's', 0, 7200, 0, 2, w, 'eng');
+pid('A4', 'เกียร์ (จาก ECU)', '', 0, 10, 0, 4, parseA4, 'eng', {fast: true, fmt: gearLabel});
 
 pid('05', 'อุณหภูมิน้ำ', '°C', -40, 130, 0, 1, temp, 'temp', {hi: 105});
 pid('0F', 'อุณหภูมิอากาศเข้า', '°C', -40, 80, 0, 1, temp, 'temp', {hi: 60});
@@ -159,6 +162,7 @@ calc('LPH', 'อัตรากินน้ำมัน', 'L/h', 0, 30, 1, ['FUE
 calc('KML', 'อัตราสิ้นเปลือง (ขณะนี้)', 'km/L', 0, 40, 1, ['0D', 'FUEL']);
 calc('L100', 'อัตราสิ้นเปลือง (ขณะนี้)', 'L/100km', 0, 30, 1, ['0D', 'FUEL']);
 calc('BOOST', 'บูสต์', 'bar', -1, 2, 2, ['0B', '33']);
+calc('GEAR', 'เกียร์', '', 0, 8, 0, ['0C', '0D', 'A4'], {cat: 'eng', fmt: gearLabel, note: 'note.gear'});
 calc('ACC', 'แรง G (เร่ง/เบรก)', 'g', -1, 1, 2, ['0D']);
 calc('POW', 'กำลังโดยประมาณ', 'hp', 0, 400, 0, ['10'], {note: 'note.maf'});
 calc('TDIST', 'ระยะทางทริป', 'km', 0, 1000, 2, ['0D']);
@@ -198,6 +202,7 @@ export const PRESETS: Dash[] = [
   ]},
   {name: '', preset: 'sport', widgets: [
     {id: '0C', type: 'gauge', size: 2}, {id: '0D', type: 'num', size: 2},
+    {id: 'GEAR', type: 'num', size: 2},
     {id: 'BOOST', type: 'gauge', size: 1}, {id: '11', type: 'gauge', size: 1},
     {id: 'ACC', type: 'num', size: 1}, {id: '0E', type: 'num', size: 1},
     {id: '05', type: 'bar', size: 1}, {id: '0F', type: 'bar', size: 1},
