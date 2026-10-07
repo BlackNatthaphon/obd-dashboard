@@ -1,4 +1,4 @@
-# OBD Dashboard (React Native)
+# BlackTech (React Native)
 
 แอพอ่านค่ารถผ่านตัวเสียบ ELM327 แบบ Bluetooth LE — เขียนด้วย React Native + Expo (TypeScript)
 

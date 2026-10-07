@@ -84,7 +84,7 @@ export default function Settings() {
           }} />
         </View>
       </Section>
-      <Hint style={{marginTop: 12}}>OBD Dashboard {Constants.expoConfig?.version ?? ''} · React Native</Hint>
+      <Hint style={{marginTop: 12}}>{Constants.expoConfig?.name ?? 'BlackTech'} {Constants.expoConfig?.version ?? ''}</Hint>
     </ScrollView>
   );
 }
