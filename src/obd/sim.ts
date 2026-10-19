@@ -82,9 +82,30 @@ export function createSimTransport(): Transport {
     return v.map(x => h(x)).join('');
   }
 
+  // ตั้งค่าแบบ BMW (ATSH / ATCEA / ATH) — ใช้ตอบความเร็ว 4 ล้อจากกล่อง DSC
+  const at = {sh: '7DF', cea: '', h1: false};
+  let drop = 0;
+  function wheelFrames(): string {
+    const v = s.speed;
+    // เลี้ยวโค้งเล็กน้อย + ล้อหลังซ้ายเซนเซอร์เสีย: สัญญาณหายเป็นช่วงๆ (ให้เห็นในโหมดจำลอง)
+    const turn = Math.sin(s.run / 6) * 0.02;
+    if (drop > 0) drop--; else if (v > 10 && Math.random() < 0.02) drop = 3;
+    const w = [v * (1 + turn), v * (1 - turn), drop ? 0 : v * (1 + turn * 0.8), v * (1 - turn * 0.8)];
+    const data = '62DBE4' + w.map(x => h(Math.max(0, x + noise(0.1)) * 100, 2)).join('') + '0101010101646464640000';
+    const bytes = data.match(/../g)!;
+    const len = bytes.length, hdr = at.h1 ? '629' : '';
+    const out = [hdr + 'F110' + h(len) + bytes.slice(0, 5).join('')];
+    for (let i = 5, n = 1; i < len; i += 6, n++) out.push(hdr + 'F12' + (n & 15).toString(16).toUpperCase() + bytes.slice(i, i + 6).join('').padEnd(12, '0'));
+    return out.join('\n');
+  }
+
   function answer(cmd: string): string {
     cmd = cmd.trim().toUpperCase();
-    if (cmd === 'ATZ') return 'ELM327 v1.5';
+    if (cmd === 'ATZ') { Object.assign(at, {sh: '7DF', cea: '', h1: false}); return 'ELM327 v1.5'; }
+    if (cmd.startsWith('ATSH')) { at.sh = cmd.slice(4); return 'OK'; }
+    if (cmd.startsWith('ATCEA')) { at.cea = cmd.slice(5); return 'OK'; }
+    if (cmd === 'ATH1' || cmd === 'ATH0') { at.h1 = cmd === 'ATH1'; return 'OK'; }
+    if (at.sh === '6F1') return at.cea === '29' && cmd === '22DBE4' ? wheelFrames() : 'NO DATA';
     if (cmd === 'ATI') return 'ELM327 v1.5 (sim)';
     if (cmd === 'ATRV') return (14.1 + noise(0.2)).toFixed(1) + 'V';
     if (cmd === 'ATDPN') return 'A6';

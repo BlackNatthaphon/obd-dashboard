@@ -40,6 +40,8 @@ export default function Root() {
             headerStyle: {backgroundColor: t.bg}, headerTintColor: t.fg}} />
           <Stack.Screen name="log" options={{presentation: 'modal', headerShown: true, title: tr('log.title'),
             headerStyle: {backgroundColor: t.bg}, headerTintColor: t.fg}} />
+          <Stack.Screen name="wheels" options={{headerShown: true, title: tr('wh.title'),
+            headerStyle: {backgroundColor: t.bg}, headerTintColor: t.fg}} />
           <Stack.Screen name="hud" options={{presentation: 'fullScreenModal', animation: 'fade'}} />
         </Stack>
         <DevicePicker />

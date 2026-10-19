@@ -1,5 +1,5 @@
 // ตรวจเช็ค: ไฟเช็คเอนจิ้น, รหัสข้อผิดพลาด, ความพร้อมระบบตรวจสอบ, ข้อมูลรถ
-import { useFocusEffect } from 'expo-router';
+import { router, useFocusEffect } from 'expo-router';
 import { useCallback } from 'react';
 import { ActivityIndicator, Linking, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import Svg, { Path } from 'react-native-svg';
@@ -53,6 +53,16 @@ export default function Diag() {
             await diagClear();
         }} />
       </View>
+
+      <Pressable onPress={() => router.push('/wheels')}>
+        <Card style={{marginTop: 10, flexDirection: 'row', alignItems: 'center', gap: 10}}>
+          <View style={{flex: 1}}>
+            <Text style={{color: t.fg, fontSize: 15, fontWeight: '700'}}>{tr('wh.open')}</Text>
+            <Hint>{tr('wh.openHint')}</Hint>
+          </View>
+          <Text style={{color: t.mut, fontSize: 22}}>›</Text>
+        </Card>
+      </Pressable>
 
       <H2>{tr('diag.codes')}</H2>
       <Card style={{paddingVertical: 4}}>

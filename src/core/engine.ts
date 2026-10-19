@@ -4,6 +4,7 @@ import { SRC, type Source } from '../obd/catalog';
 import { Elm, now, type DtcResult, type ElmInfo, type StatusResult, type Transport } from '../obd/elm';
 import { openBle, scanDevices, type FoundDevice } from '../obd/ble';
 import { createSimTransport } from '../obd/sim';
+import { bmwProbe, bmwRead, bmwRestore, decodeWheels, DID_WHEELS, DSC, type Method } from '../obd/bmw';
 import { beep, buzz, toneOff, toneOn } from './feedback';
 import { GearEstimator } from './gear';
 import { Race } from './race';
@@ -11,6 +12,7 @@ import { curDash, setSettings, settings, type RaceRun, type Trip } from './setti
 import { exportCsv } from './share';
 import { createStore } from './store';
 import { clearValues, setVal, V, val } from './values';
+import { WheelCheck } from './wheels';
 
 export type Page = 'dash' | 'race' | 'live' | 'graph' | 'diag';
 
@@ -90,6 +92,7 @@ const poll = {last: {} as Record<string, number>, back: {} as Record<string, num
 async function pollLoop() {
   poll.hzT = now();
   while (elm.connected) {
+    if (wheels.get().on || bmw.active) { await wheelStep(); continue; }
     const t = now();
     if (t - poll.listT > 500) { poll.list = wantList(); poll.listT = t; }
     let best: string | null = null, bs = -Infinity;
@@ -214,6 +217,66 @@ function shiftCheck(rpm: number) {
   shiftStopT = setTimeout(stopShiftTone, 2000);
 }
 
+// ---------- ความเร็ว 4 ล้อ (กล่อง DSC ของ BMW) ----------
+// ระหว่างเปิดหน้านี้ตัวเสียบถูกตั้งให้คุยกับกล่อง DSC → หยุดอ่านค่า OBD ปกติไว้ก่อน แล้วคืนค่าเมื่อออก
+export const wheels = createStore({
+  on: false,
+  state: 'idle' as 'idle' | 'setup' | 'ok' | 'noreply' | 'nodid' | 'notcan',
+  method: null as Method | null,
+  hz: 0,
+});
+export const wheelCheck = new WheelCheck();
+const bmw = {active: false, method: null as Method | null, retryT: 0, fails: 0, n: 0, hzT: 0};
+const sleep = (ms: number) => new Promise(r => setTimeout(r, ms));
+
+export function startWheels() {
+  wheelCheck.reset(); wheelCheck.last = null;
+  Object.assign(bmw, {retryT: 0, fails: 0});
+  stopShiftTone();
+  wheels.set({on: true, state: session.get().state === 'connected' ? 'setup' : 'idle', hz: 0});
+}
+export function stopWheels() { wheels.set({on: false}); }
+
+async function wheelStep() {
+  if (!wheels.get().on) {
+    if (bmw.active) { await bmwRestore(elm); log('BMW mode off'); }
+    Object.assign(bmw, {active: false, method: null});
+    wheels.set({state: 'idle', method: null, hz: 0});
+    poll.listT = 0;
+    return;
+  }
+  if (!bmw.method) {
+    // F/G-series ใช้ CAN 11 bit 500k (โปรโตคอล 6)
+    if (!elm.info.proto.endsWith('6')) { wheels.set({state: 'notcan'}); await sleep(500); return; }
+    if (bmw.retryT > now()) { await sleep(200); return; }
+    bmw.active = true;
+    wheels.set({state: 'setup'});
+    const r = await bmwProbe(elm, DSC, DID_WHEELS, log);
+    if (r && 'method' in r) {
+      Object.assign(bmw, {method: r.method, fails: 0, n: 0, hzT: now()});
+      wheels.set({state: 'ok', method: r.method});
+      gotWheels(r.data);
+    } else {
+      // กล่องไม่ตอบ (สวิตช์ยังไม่ ON / ตัวเสียบไม่รองรับ) → ลองใหม่ทุก 5 วิ · กล่องตอบว่าไม่มีค่านี้ → ไม่ต้องลองซ้ำ
+      wheels.set({state: r ? 'nodid' : 'noreply'});
+      bmw.retryT = now() + (r ? 1e12 : 5000);
+    }
+    return;
+  }
+  const r = await bmwRead(elm, bmw.method, DSC, DID_WHEELS);
+  if (r && 'data' in r) { bmw.fails = 0; gotWheels(r.data); }
+  else if (++bmw.fails >= 5) { bmw.method = null; log('BMW DSC: lost, probing again'); }
+  const el = now() - bmw.hzT;
+  if (el > 1000) { wheels.set({hz: (bmw.n * 1000) / el}); bmw.n = 0; bmw.hzT = now(); }
+}
+
+function gotWheels(d: number[]) {
+  const w = decodeWheels(d);
+  if (!w) return;
+  bmw.n++;
+  wheelCheck.update(w, now());
+}
+
 // ---------- จับเวลา ----------
 export const race = new Race(settings.get().raceMode, {
   onReady: () => beep(990),
@@ -276,6 +339,7 @@ export async function connect(mode: 'ble' | 'sim' = 'ble') {
     race.reset();
     diag.set({status: null, dtc: null, vin: null, scanned: false});
     session.set({state: 'connected', info, status: msg('st.connected', {name: info.name + (info.sim ? '' : ' · ' + info.elm)})});
+    if (wheels.get().on) startWheels();
     pollLoop();
   } catch (e) {
     session.set({state: 'idle', status: msg('st.failed', {err: (e as Error).message})});
@@ -290,6 +354,8 @@ elm.onLost = () => {
   if (rec) stopRec();
   stopShiftTone();
   race.reset();
+  Object.assign(bmw, {active: false, method: null});
+  if (wheels.get().on) wheels.set({state: 'idle', method: null, hz: 0});
   setSettings({trip: {...trip}, gearHist: gear.hist.slice()});
   session.set({state: 'idle', hz: 0, status: msg('st.disconnected')});
 };
