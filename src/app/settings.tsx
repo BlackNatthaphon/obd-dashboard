@@ -1,0 +1,99 @@
+// ตั้งค่า
+import Constants from 'expo-constants';
+import { router } from 'expo-router';
+import { Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { connect, disconnect, forgetDevice, resetGear, session } from '../core/engine';
+import { DEFAULTS, setSettings, useSettings, type Orientation, type ThemeName } from '../core/settings';
+import { Btn, Chip, confirm, Hint, Stepper, Toggle } from '../ui/kit';
+import { THEMES, useTheme } from '../ui/theme';
+import { LANGS, t as tr, type Key } from '../i18n';
+
+const clone = <T,>(o: T): T => JSON.parse(JSON.stringify(o));
+
+function Section({title, children}: { title?: string; children: React.ReactNode }) {
+  const t = useTheme();
+  return (
+    <View style={[st.set, {borderColor: t.line}]}>
+      {title && <Text style={{color: t.fg, fontSize: 14, fontWeight: '700', marginBottom: 8}}>{title}</Text>}
+      {children}
+    </View>
+  );
+}
+
+export default function Settings() {
+  const t = useTheme();
+  const cfg = useSettings();
+  return (
+    <ScrollView style={{backgroundColor: t.bg}} contentContainerStyle={{padding: 16, paddingBottom: 40, maxWidth: 760, alignSelf: 'center', width: '100%'}}>
+      <Section title={tr('set.language')}>
+        <View style={{flexDirection: 'row', flexWrap: 'wrap', gap: 8}}>
+          <Chip title={tr('set.langAuto')} on={cfg.lang === 'auto'} onPress={() => setSettings({lang: 'auto'})} />
+          {LANGS.map(l => <Chip key={l.id} title={l.name} on={cfg.lang === l.id} onPress={() => setSettings({lang: l.id})} />)}
+        </View>
+      </Section>
+      <Section title={tr('set.theme')}>
+        <View style={{flexDirection: 'row', gap: 8}}>
+          {(Object.keys(THEMES) as ThemeName[]).map(k => (
+            <Pressable key={k} onPress={() => setSettings({theme: k})}
+              style={[st.sw, {backgroundColor: THEMES[k].card, borderColor: cfg.theme === k ? t.acc : THEMES[k].line}]}>
+              <View style={{width: 18, height: 18, borderRadius: 9, backgroundColor: THEMES[k].acc, marginBottom: 6}} />
+              <Text style={{color: THEMES[k].fg, fontSize: 12, fontWeight: '600'}}>{tr(`theme.${k}` as Key)}</Text>
+            </Pressable>
+          ))}
+        </View>
+      </Section>
+      <Section title={tr('set.timing')}>
+        <Stepper label={tr('set.shift')} value={cfg.shiftRpm} step={100} min={2500} max={9000} unit="rpm" onChange={v => setSettings({shiftRpm: v})} />
+        <Toggle label={tr('set.shiftBeep')} value={cfg.shiftBeep} onChange={v => setSettings({shiftBeep: v})} />
+        <Stepper label={tr('set.redline')} value={cfg.redline} step={100} min={3000} max={9500} unit="rpm" onChange={v => setSettings({redline: v})} />
+      </Section>
+      <Section title={tr('set.fuel')}>
+        <View style={{flexDirection: 'row', gap: 8}}>
+          <Chip title={tr('set.gas')} on={cfg.fuel === 'gas'} onPress={() => setSettings({fuel: 'gas'})} />
+          <Chip title={tr('set.diesel')} on={cfg.fuel === 'diesel'} onPress={() => setSettings({fuel: 'diesel'})} />
+        </View>
+        <Hint style={{marginTop: 6}}>{tr('set.fuelHint')}</Hint>
+      </Section>
+      <Section>
+        <Toggle label={tr('set.sound')} value={cfg.sound} onChange={v => setSettings({sound: v})} />
+        <Toggle label={tr('set.vibrate')} value={cfg.vibrate} onChange={v => setSettings({vibrate: v})} />
+        <Toggle label={tr('set.hudMirror')} value={cfg.hudMirror} onChange={v => setSettings({hudMirror: v})} />
+      </Section>
+      {Platform.OS !== 'web' && (
+        <Section title={tr('set.orient')}>
+          <View style={{flexDirection: 'row', gap: 8}}>
+            {([['auto', 'set.orientAuto'], ['landscape', 'set.landscape'], ['portrait', 'set.portrait']] as [Orientation, Key][])
+              .map(([k, n]) => <Chip key={k} title={tr(n)} on={cfg.orient === k} onPress={() => setSettings({orient: k})} />)}
+          </View>
+        </Section>
+      )}
+      <Section title={tr('set.connection')}>
+        {cfg.device && <Hint style={{marginBottom: 8}}>{tr('set.saved', {name: cfg.device.name})}</Hint>}
+        <View style={{flexDirection: 'row', flexWrap: 'wrap', gap: 8}}>
+          {cfg.device && <Btn title={tr('set.change')} onPress={() => { forgetDevice(); router.back(); }} />}
+          <Btn title={tr('set.sim')} onPress={() => { if (session.get().state === 'connected') disconnect(); router.back(); setTimeout(() => connect('sim'), 50); }} />
+          <Btn title={tr('set.log')} onPress={() => router.push('/log')} />
+        </View>
+      </Section>
+      <Section title={tr('set.data')}>
+        <View style={{flexDirection: 'row', flexWrap: 'wrap', gap: 8}}>
+          <Btn title={tr('set.resetDash')} onPress={async () => {
+            if (await confirm(tr('set.resetDashQ'), tr('set.resetDashMsg'), tr('set.resetOk'))) setSettings({dash: clone(DEFAULTS.dash), dashIdx: 0});
+          }} />
+          <Btn title={tr('set.resetGear')} onPress={async () => {
+            if (await confirm(tr('set.resetGearQ'), tr('set.resetGearMsg'), tr('set.resetOk'))) resetGear();
+          }} />
+          <Btn title={tr('set.clearRuns')} onPress={async () => {
+            if (await confirm(tr('race.clearQ'), tr('race.clearMsg'), tr('race.clearOk'))) setSettings({runs: []});
+          }} />
+        </View>
+      </Section>
+      <Hint style={{marginTop: 12}}>{Constants.expoConfig?.name ?? 'BlackTech'} {Constants.expoConfig?.version ?? ''}</Hint>
+    </ScrollView>
+  );
+}
+
+const st = StyleSheet.create({
+  set: {paddingVertical: 14, borderBottomWidth: 1},
+  sw: {flex: 1, borderWidth: 2, borderRadius: 12, paddingVertical: 10, alignItems: 'center'},
+});

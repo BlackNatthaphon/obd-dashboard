@@ -14,29 +14,42 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: '17'
 
-      - uses: gradle/actions/setup-gradle@v4
-        with:
-          gradle-version: '8.9'
+      - name: Install
+        run: npm ci
+
+      - name: Typecheck & test
+        run: |
+          npm run typecheck
+          npm test
+
+      - name: Generate Android project
+        run: npx expo prebuild --platform android --no-install
 
       - name: Build
-        run: gradle assembleRelease --no-daemon --stacktrace
+        working-directory: android
+        run: ./gradlew assembleRelease --no-daemon
 
       - name: Rename APK
-        run: cp app/build/outputs/apk/release/app-release.apk obd-dashboard.apk
+        run: cp android/app/build/outputs/apk/release/app-release.apk blacktech.apk
 
       - uses: actions/upload-artifact@v4
         with:
-          name: obd-dashboard-apk
-          path: obd-dashboard.apk
+          name: blacktech-apk
+          path: blacktech.apk
 
       - name: Publish release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v1.0.${{ github.run_number }}
-          name: OBD Dashboard 1.0.${{ github.run_number }}
-          files: obd-dashboard.apk
+          tag_name: v3.1.${{ github.run_number }}
+          name: BlackTech 3.1.${{ github.run_number }}
+          files: blacktech.apk
