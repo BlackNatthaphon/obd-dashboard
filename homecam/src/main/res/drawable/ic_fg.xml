@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Camera body + lens + small shield = "secure home camera". -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp" android:height="108dp"
+    android:viewportWidth="108" android:viewportHeight="108">
+    <path android:pathData="M30,40 h40 a6,6 0 0,1 6,6 v18 a6,6 0 0,1 -6,6 h-40 a6,6 0 0,1 -6,-6 v-18 a6,6 0 0,1 6,-6 z"
+        android:fillColor="#161B22" android:strokeColor="#30363D" android:strokeWidth="3" />
+    <path android:pathData="M76,50 l10,-6 v20 l-10,-6 z" android:fillColor="#30363D" />
+    <path android:pathData="M50,55 m-10,0 a10,10 0 1,0 20,0 a10,10 0 1,0 -20,0" android:fillColor="#2F81F7" />
+    <path android:pathData="M50,55 m-4,0 a4,4 0 1,0 8,0 a4,4 0 1,0 -8,0" android:fillColor="#E6EDF3" />
+    <path android:pathData="M33,46 m-2.5,0 a2.5,2.5 0 1,0 5,0 a2.5,2.5 0 1,0 -5,0" android:fillColor="#3FB950" />
+</vector>

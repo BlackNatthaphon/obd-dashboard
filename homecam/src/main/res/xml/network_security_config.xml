@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  ONVIF cameras only speak plain HTTP on the LAN, so cleartext must be allowed for
+  HttpURLConnection. NetGuard refuses every host that is not a private LAN/VPN
+  address, so nothing ever goes to the internet in cleartext. User-installed CAs
+  are never trusted.
+-->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="true">
+        <trust-anchors>
+            <certificates src="system" />
+        </trust-anchors>
+    </base-config>
+</network-security-config>
