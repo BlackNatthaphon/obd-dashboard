@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="ic_bg">#0D1117</color>
+    <color name="bg">#0D1117</color>
+    <color name="surface">#161B22</color>
+    <color name="border">#30363D</color>
+    <color name="text">#E6EDF3</color>
+    <color name="muted">#8B949E</color>
+    <color name="accent">#2F81F7</color>
+    <color name="danger">#F85149</color>
+    <color name="ok">#3FB950</color>
+    <color name="scrim">#99000000</color>
+</resources>

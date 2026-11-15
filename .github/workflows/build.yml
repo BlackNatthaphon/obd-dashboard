@@ -3,6 +3,9 @@ name: Build APK
 on:
   push:
     branches: [main]
+    paths-ignore:
+      - 'homecam/**'
+      - '.github/workflows/homecam.yml'
   workflow_dispatch:
 
 permissions:
@@ -24,7 +27,7 @@ jobs:
           gradle-version: '8.9'
 
       - name: Build
-        run: gradle assembleRelease --no-daemon --stacktrace
+        run: gradle :app:assembleRelease --no-daemon --stacktrace
 
       - name: Rename APK
         run: cp app/build/outputs/apk/release/app-release.apk obd-dashboard.apk

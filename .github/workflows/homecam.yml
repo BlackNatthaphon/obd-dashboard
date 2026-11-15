@@ -1,0 +1,67 @@
+name: Build HomeCam APK
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'homecam/**'
+      - '.github/workflows/homecam.yml'
+  pull_request:
+    paths:
+      - 'homecam/**'
+      - '.github/workflows/homecam.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
+
+      # Optional but recommended: a private signing key kept in repo secrets, so
+      # every build can update the installed app. See homecam/README.md.
+      - name: Restore signing key
+        env:
+          KEYSTORE_B64: ${{ secrets.HOMECAM_KEYSTORE_B64 }}
+        run: |
+          if [ -n "$KEYSTORE_B64" ]; then
+            echo "$KEYSTORE_B64" | base64 -d > "$RUNNER_TEMP/homecam.jks"
+            echo "HOMECAM_KEYSTORE=$RUNNER_TEMP/homecam.jks" >> "$GITHUB_ENV"
+          else
+            echo "::warning::HOMECAM_KEYSTORE_B64 secret not set; signing with a throwaway debug key."
+          fi
+
+      - name: Build
+        env:
+          HOMECAM_KEYSTORE_PASSWORD: ${{ secrets.HOMECAM_KEYSTORE_PASSWORD }}
+          HOMECAM_KEY_ALIAS: ${{ secrets.HOMECAM_KEY_ALIAS }}
+          HOMECAM_KEY_PASSWORD: ${{ secrets.HOMECAM_KEY_PASSWORD }}
+        run: gradle :homecam:assembleRelease :homecam:lintRelease --no-daemon --stacktrace
+
+      - name: Rename APK
+        run: cp homecam/build/outputs/apk/release/homecam-release.apk homecam.apk
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: homecam-apk
+          path: homecam.apk
+
+      - name: Publish release
+        if: github.event_name != 'pull_request'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: homecam-v1.0.${{ github.run_number }}
+          name: กล้องในบ้าน 1.0.${{ github.run_number }}
+          files: homecam.apk
