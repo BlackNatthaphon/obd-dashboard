@@ -4,7 +4,8 @@ import { SRC, type Source } from '../obd/catalog';
 import { Elm, now, type DtcResult, type ElmInfo, type StatusResult, type Transport } from '../obd/elm';
 import { openBle, scanDevices, type FoundDevice } from '../obd/ble';
 import { createSimTransport } from '../obd/sim';
-import { bmwProbe, bmwRead, bmwRestore, decodeWheels, DID_WHEELS, DSC, type Method } from '../obd/bmw';
+import { bmwProbe, bmwRead, bmwReq, bmwRestore, bmwSetup, CLEAR_REQ, decodeWheels, DID_WHEELS, DSC, DTC_REQ, ECUS, parseDtc19,
+  type BmwDtc, type Method } from '../obd/bmw';
 import { beep, buzz, toneOff, toneOn } from './feedback';
 import { GearEstimator } from './gear';
 import { Race } from './race';
@@ -50,12 +51,18 @@ elm.onStatus = m => session.set({status: m});
 
 // ---------- ค่าที่ต้องอ่าน ----------
 const supportedPid = (id: string) => session.get().state !== 'connected' || !SRC[id]?.mode1 || elm.info.supported.has(id);
-export const isSupported = supportedPid;
+/** 5B ที่รถไม่ส่งแต่อ่านจากกล่องแบต BMW แทนได้ ถือว่ารองรับ */
+export const isSupported = (id: string) => supportedPid(id) || (id === '5B' && hv5B());
 const fuelSrc = () => (elm.info.supported.has('5E') ? '5E' : '10');
+
+/** รถไม่ส่ง PID 5B (แบตไฮบริด) แต่เป็น BMW ที่ใช้ CAN → อ่านจากกล่องแบตแทน แล้วแสดงในช่อง 5B เดิม */
+const hv5B = () => !elm.info.supported.has('5B') && isBmwCan();
+const isBmwCan = () => elm.info.proto.endsWith('6');
 
 function expand(id: string, out: Set<string>) {
   const s = SRC[id];
   if (!s) return;
+  if (id === '5B' && hv5B()) { out.add('HVSOC'); return; }
   if (!s.calc) { out.add(id); return; }
   for (const n of s.need ?? []) out.add(n === 'FUEL' ? fuelSrc() : n);
 }
@@ -65,8 +72,13 @@ function wantList(): string[] {
   const cfg = settings.get();
   if (hudOn || page === 'race' || cfg.shiftBeep) { out.add('0C'); }
   if (page === 'dash') for (const w of curDash(cfg).widgets) expand(w.id, out);
-  if (page === 'live') { for (const id of elm.info.supported) if (SRC[id]) out.add(id); out.add('RV'); }
+  if (page === 'live') {
+    for (const id of elm.info.supported) if (SRC[id]) out.add(id);
+    out.add('RV');
+    if (isBmwCan()) for (const s of Object.values(SRC)) if (s.bmw) out.add(s.id);
+  }
   if (page === 'graph') for (const id of cfg.graph) expand(id, out);
+  if (page === 'graph' && hv5B() && out.has('5B')) out.add('HVSOC');
   return [...out].filter(id => SRC[id] && (!SRC[id].mode1 || elm.info.supported.has(id)));
 }
 
@@ -92,11 +104,16 @@ const poll = {last: {} as Record<string, number>, back: {} as Record<string, num
 async function pollLoop() {
   poll.hzT = now();
   while (elm.connected) {
+    const job = jobs.shift();
+    if (job) { await job(); bmw.method = null; continue; }
     if (wheels.get().on || bmw.active) { await wheelStep(); continue; }
     const t = now();
     if (t - poll.listT > 500) { poll.list = wantList(); poll.listT = t; }
+    const bmwIds = poll.list.filter(id => SRC[id].bmw);
+    if (bmwIds.length && t - hv.lastT > HV_PERIOD) { hv.lastT = t; await hvCycle(bmwIds); continue; }
     let best: string | null = null, bs = -Infinity;
     for (const id of poll.list) {
+      if (SRC[id].bmw) continue;
       if ((poll.back[id] || 0) > t) continue;
       const due = t - (poll.last[id] || 0) - period(id);
       if (due > bs) { bs = due; best = id; }
@@ -252,7 +269,7 @@ async function wheelStep() {
     bmw.active = true;
     wheels.set({state: 'setup'});
     const r = await bmwProbe(elm, DSC, DID_WHEELS, log);
-    if (r && 'method' in r) {
+    if (r && 'data' in r) {
       Object.assign(bmw, {method: r.method, fails: 0, n: 0, hzT: now()});
       wheels.set({state: 'ok', method: r.method});
       gotWheels(r.data);
@@ -275,6 +292,153 @@ function gotWheels(d: number[]) {
   if (!w) return;
   bmw.n++;
   wheelCheck.update(w, now());
+}
+
+// ---------- ค่าเฉพาะ BMW (แบตไฮบริด / แบต 12V) ----------
+// ทุก HV_PERIOD: ตั้งตัวเสียบคุยกับกล่องทีละกล่อง อ่านทุกค่าที่ต้องการของกล่องนั้น แล้วคืนค่าเป็น OBD-II ปกติ
+const HV_PERIOD = 2000;
+export const hvState = createStore({state: 'idle' as 'idle' | 'ok' | 'noreply' | 'notcan'});
+const hv = {
+  lastT: 0, probeT: 0,
+  /** วิธีคุยกับกล่องที่ตัวเสียบนี้ใช้ได้ (หาครั้งแรกแล้วจำไว้) */
+  method: null as Method | null,
+  /** ที่มาที่กำลังใช้ของแต่ละค่า (index ใน SRC[id].bmw) */
+  alt: {} as Record<string, number>,
+  /** "ecu:did" ที่ไม่ต้องอ่าน: เวลาที่จะลองใหม่ */
+  skip: {} as Record<string, number>,
+};
+function hvReset() { Object.assign(hv, {lastT: 0, probeT: 0, method: null, alt: {}, skip: {}}); hvState.set({state: 'idle'}); }
+
+async function hvCycle(ids: string[]) {
+  if (!isBmwCan()) { hvState.set({state: 'notcan'}); return; }
+  const t = now();
+  // กล่อง → did → ค่าที่ได้จาก did นั้น
+  const plan = new Map<number, Map<string, string[]>>();
+  for (const id of ids) {
+    const alts = SRC[id].bmw!;
+    const a = alts[hv.alt[id] ?? 0];
+    if ((hv.skip[a.ecu + ':' + a.did] ?? 0) > t) continue;
+    if (!plan.has(a.ecu)) plan.set(a.ecu, new Map());
+    const m = plan.get(a.ecu)!;
+    m.set(a.did, [...(m.get(a.did) ?? []), id]);
+  }
+  if (!plan.size) return;
+  if (!hv.method) {
+    if (hv.probeT > t) return;
+    const [ecu, dids] = plan.entries().next().value!;
+    const did = dids.keys().next().value!;
+    const r = await bmwProbe(elm, ecu, did, log);
+    if (!r) { await bmwRestore(elm); hv.probeT = now() + 10000; hvState.set({state: 'noreply'}); return; }
+    hv.method = r.method;
+  }
+  const m = hv.method;
+  let any = false;
+  for (const [ecu, dids] of plan) {
+    if (!elm.connected) return;
+    if (!(await bmwSetup(elm, m, ecu))) { hv.method = null; break; }
+    for (const [did, wants] of dids) {
+      const r = await bmwRead(elm, m, ecu, did);
+      const key = ecu + ':' + did;
+      if (r && 'data' in r) {
+        any = true;
+        const tt = now();
+        for (const id of wants) {
+          const v = SRC[id].bmw![hv.alt[id] ?? 0].f(r.data);
+          if (v == null) continue;
+          setVal(id, v, tt);
+          if (id === 'HVSOC' && hv5B()) setVal('5B', v, tt);
+        }
+      } else {
+        // NRC = กล่องไม่มีค่านี้ → ไม่ต้องถามอีก และเปลี่ยนไปใช้ที่มาถัดไป · ไม่ตอบ = กล่องหลับ/ไม่มีกล่องนี้ → ลองใหม่ทีหลัง
+        hv.skip[key] = now() + (r ? 1e12 : 15000);
+        for (const id of wants) {
+          const n = SRC[id].bmw!.length;
+          if (n > 1) hv.alt[id] = ((hv.alt[id] ?? 0) + 1) % n;
+          if (V[id]) V[id].stale = true;
+        }
+        log(`BMW ${ecu.toString(16)} ${did}: ${r ? 'not supported' : 'no reply'}`);
+      }
+    }
+  }
+  await bmwRestore(elm);
+  if (any) hvState.set({state: 'ok'});
+}
+
+// ---------- งานที่ต้องหยุดอ่านค่าปกติชั่วคราว (รันในลูปอ่านค่า จะได้ไม่ส่งคำสั่งแทรกกัน) ----------
+const jobs: (() => Promise<void>)[] = [];
+function runJob<T>(fn: () => Promise<T>): Promise<T> {
+  return new Promise((res, rej) => { jobs.push(() => fn().then(res, rej)); });
+}
+
+// ---------- รหัสข้อผิดพลาดเฉพาะ BMW (ทุกกล่อง) ----------
+export interface EcuDtc { ecu: number; name: string | null; codes: BmwDtc[]; }
+export const bmwDiag = createStore({
+  busy: false,
+  scanned: false,
+  /** กล่องที่สแกนอยู่ (แสดงความคืบหน้า) */
+  at: '' as string,
+  ecus: [] as EcuDtc[],
+  err: null as 'notcan' | 'noreply' | null,
+  cleared: null as number | null,
+});
+
+async function ensureMethod(): Promise<Method | null> {
+  if (hv.method) return hv.method;
+  // ถามรหัส VIN จากกล่องเครื่องยนต์ — ทุกกล่อง UDS ต้องมี
+  const r = await bmwProbe(elm, 0x12, 'F190', log);
+  if (r) hv.method = r.method;
+  return hv.method;
+}
+
+export function bmwDtcScan(): Promise<void> {
+  if (!elm.connected || bmwDiag.get().busy) return Promise.resolve();
+  bmwDiag.set({busy: true, err: null, at: '', cleared: null});
+  return runJob(async () => {
+    try {
+      if (!isBmwCan()) { bmwDiag.set({err: 'notcan'}); return; }
+      const m = await ensureMethod();
+      if (!m) { bmwDiag.set({err: 'noreply'}); return; }
+      const found: EcuDtc[] = [];
+      for (const e of ECUS) {
+        if (!elm.connected) break;
+        bmwDiag.set({at: e.name ?? '0x' + e.ecu.toString(16).toUpperCase().padStart(2, '0')});
+        if (!(await bmwSetup(elm, m, e.ecu))) continue;
+        const codes = parseDtc19(await bmwReq(elm, m, e.ecu, DTC_REQ, 5000));
+        if (codes) found.push({...e, codes});
+      }
+      found.sort((a, b) => b.codes.length - a.codes.length);
+      bmwDiag.set({ecus: found, scanned: true, err: found.length ? null : 'noreply'});
+      log(`BMW DTC scan: ${found.length} modules, ${found.reduce((n, e) => n + e.codes.length, 0)} codes`);
+    } finally {
+      await bmwRestore(elm);
+      bmwDiag.set({busy: false, at: ''});
+    }
+  });
+}
+
+/** ล้างรหัสในทุกกล่องที่ตอบตอนสแกน (UDS 14 FFFFFF) แล้วสแกนใหม่ · คืนจำนวนกล่องที่ล้างสำเร็จ */
+export async function bmwDtcClear(): Promise<number> {
+  if (!elm.connected || bmwDiag.get().busy) return 0;
+  const targets = bmwDiag.get().ecus.filter(e => e.codes.length);
+  bmwDiag.set({busy: true});
+  const n = await runJob(async () => {
+    let ok = 0;
+    try {
+      const m = await ensureMethod();
+      if (!m) return 0;
+      for (const e of targets) {
+        bmwDiag.set({at: e.name ?? '0x' + e.ecu.toString(16).toUpperCase()});
+        if (!(await bmwSetup(elm, m, e.ecu))) continue;
+        const r = await bmwReq(elm, m, e.ecu, CLEAR_REQ, 6000);
+        if (r && r[0] === 0x54) ok++;
+      }
+    } finally { await bmwRestore(elm); bmwDiag.set({busy: false, at: ''}); }
+    return ok;
+  });
+  await new Promise(r => setTimeout(r, 800));
+  await bmwDtcScan();
+  bmwDiag.set({cleared: n});
+  return n;
 }
 
 // ---------- จับเวลา ----------
@@ -338,6 +502,9 @@ export async function connect(mode: 'ble' | 'sim' = 'ble') {
     lastSpd = null;
     race.reset();
     diag.set({status: null, dtc: null, vin: null, scanned: false});
+    bmwDiag.set({ecus: [], scanned: false, err: null, cleared: null});
+    hvReset();
+    jobs.length = 0;
     session.set({state: 'connected', info, status: msg('st.connected', {name: info.name + (info.sim ? '' : ' · ' + info.elm)})});
     if (wheels.get().on) startWheels();
     pollLoop();
@@ -355,6 +522,9 @@ elm.onLost = () => {
   stopShiftTone();
   race.reset();
   Object.assign(bmw, {active: false, method: null});
+  hvReset();
+  // งานที่ค้างอยู่ (สแกนรหัส BMW) ให้จบไปเลย ไม่ต้องรอ
+  for (const j of jobs.splice(0)) j();
   if (wheels.get().on) wheels.set({state: 'idle', method: null, hz: 0});
   setSettings({trip: {...trip}, gearHist: gear.hist.slice()});
   session.set({state: 'idle', hz: 0, status: msg('st.disconnected')});

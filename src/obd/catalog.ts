@@ -1,10 +1,11 @@
 // ค่าทั้งหมดที่แอพรู้จัก: OBD-II Mode 01, ค่าจากตัวเสียบ และค่าที่คำนวณเอง
 import { gearLabel, parseA4 } from '../core/gear';
 import { getLang, t, type Key } from '../i18n';
+import { dec, type BmwAlt } from './bmw';
 
-export type Category = 'eng' | 'fuel' | 'temp' | 'elec' | 'o2' | 'trip' | 'info';
+export type Category = 'eng' | 'fuel' | 'temp' | 'elec' | 'hv' | 'o2' | 'trip' | 'info';
 
-export const CATEGORIES: Category[] = ['eng', 'fuel', 'temp', 'elec', 'o2', 'trip', 'info'];
+export const CATEGORIES: Category[] = ['eng', 'fuel', 'temp', 'elec', 'hv', 'o2', 'trip', 'info'];
 export const catName = (c: Category) => t(`cat.${c}` as Key);
 
 export interface Source {
@@ -27,6 +28,8 @@ export interface Source {
   f?: (a: number[]) => number;
   /** คำสั่ง AT ที่คืนค่าเป็นข้อความ */
   parse?: (lines: string[]) => number | null;
+  /** อ่านจากกล่องของ BMW โดยตรง (UDS) ลองที่มาตามลำดับจนเจออันที่รถรองรับ */
+  bmw?: BmwAlt[];
   /** ค่าคำนวณ: ค่าที่ต้องอ่านเพื่อใช้คำนวณ */
   calc?: boolean;
   need?: string[];
@@ -148,6 +151,44 @@ SRC.RV = {
   id: 'RV', name: 'แบตเตอรี่ (วัดที่ตัวเสียบ)', en: EN.RV, unit: 'V', min: 9, max: 16, d: 1, cat: 'elec', cmd: 'ATRV', lo: 11.8, hi: 15.2,
   parse: lines => { const m = (lines[0] || '').match(/(\d+(\.\d+)?)/); return m ? +m[1] : null; },
 };
+
+// ---------- ค่าเฉพาะ BMW F/G-series (อ่านตรงจากกล่อง ไม่ผ่าน OBD-II) ----------
+// รหัสและสูตรจาก OBDb (github.com/OBDb/BMW-3-Series, CC BY-SA 4.0) · SME 0x07 = กล่องแบตไฮบริด, EME 0x1A = มอเตอร์ไฟฟ้า, DME 0x12 = เครื่องยนต์
+const SME = 0x07, EME = 0x1a, DME = 0x12;
+function bmw(id: string, name: string, en: string, unit: string, min: number, max: number, d: number, cat: Category,
+  alts: BmwAlt[], extra?: Partial<Source>) {
+  SRC[id] = {id, name, en, unit, min, max, d, cat, bmw: alts, ...extra};
+}
+const DFA0 = (bix: number, div: number, o: { sign?: boolean; nullmax?: number } = {}): BmwAlt =>
+  ({ecu: SME, did: 'DFA0', f: dec(bix, 16, {div, ...o})});
+
+bmw('HVSOC', 'แบตไฮบริดเหลือ (BMW)', 'Hybrid battery charge (BMW)', '%', 0, 100, 1, 'hv', [
+  {ecu: SME, did: 'E5CE', f: dec(0, 16, {div: 100})},
+  {ecu: EME, did: 'DE00', f: dec(0, 16, {div: 10})},
+  DFA0(224, 100, {nullmax: 655.35}),
+], {note: 'note.hvsoc'});
+bmw('HVV', 'แรงดันแบตไฮบริด', 'Hybrid battery voltage', 'V', 250, 420, 0, 'hv', [{ecu: SME, did: 'DD68', f: dec(0, 16, {div: 100})}]);
+bmw('HVA', 'กระแสแบตไฮบริด', 'Hybrid battery current', 'A', -200, 200, 1, 'hv',
+  [{ecu: SME, did: 'E561', f: dec(16, 16, {sign: true, mul: -1, div: 100})}], {note: 'note.hva'});
+bmw('HVSOH', 'สุขภาพแบตไฮบริด (SoH)', 'Hybrid battery health (SoH)', '%', 0, 100, 0, 'hv',
+  [{ecu: SME, did: 'E5C7', f: dec(24, 8)}, {ecu: SME, did: '6335', f: dec(24, 8)}], {lo: 70});
+bmw('HVCAP', 'ความจุเซลล์เฉลี่ย', 'Average cell capacity', 'Ah', 0, 30, 2, 'hv', [DFA0(32, 100, {nullmax: 655.35})], {note: 'note.hvcap'});
+bmw('HVCMIN', 'แรงดันเซลล์ต่ำสุด', 'Cell voltage, min', 'V', 3, 4.3, 3, 'hv', [DFA0(48, 10000, {nullmax: 6.5535})]);
+bmw('HVCMAX', 'แรงดันเซลล์สูงสุด', 'Cell voltage, max', 'V', 3, 4.3, 3, 'hv', [DFA0(64, 10000, {nullmax: 6.5535})]);
+bmw('HVCDIF', 'เซลล์ต่างกัน (สูงสุด−ต่ำสุด)', 'Cell voltage spread', 'mV', 0, 100, 0, 'hv', [{ecu: SME, did: 'DFA0', f: d => {
+  const a = dec(48, 16, {div: 10, nullmax: 6553.5})(d), b = dec(64, 16, {div: 10, nullmax: 6553.5})(d);
+  return a == null || b == null ? null : b - a;
+}}], {hi: 50, note: 'note.hvcdif'});
+bmw('HVTMIN', 'อุณหภูมิเซลล์ต่ำสุด', 'Cell temperature, min', '°C', -20, 60, 1, 'hv',
+  [{ecu: SME, did: 'DDC0', f: dec(0, 16, {sign: true, div: 100, nullmax: 327.67})}]);
+bmw('HVTMAX', 'อุณหภูมิเซลล์สูงสุด', 'Cell temperature, max', '°C', -20, 60, 1, 'hv',
+  [{ecu: SME, did: 'DDC0', f: dec(16, 16, {sign: true, div: 100, nullmax: 327.67})}], {hi: 45});
+bmw('B12V', 'แบต 12V (เซนเซอร์ IBS)', '12V battery (IBS sensor)', 'V', 9, 16, 2, 'elec',
+  [{ecu: DME, did: '402B', f: dec(16, 16, {div: 4000, add: 6, nullmax: 22.38})}], {lo: 12.2, hi: 15, note: 'note.b12v'});
+bmw('B12A', 'กระแสแบต 12V', '12V battery current', 'A', -100, 100, 1, 'elec',
+  [{ecu: DME, did: '402B', f: dec(32, 16, {div: 12.5, add: -200, nullmax: 5042.8})}], {note: 'note.b12a'});
+bmw('B12T', 'อุณหภูมิแบต 12V', '12V battery temperature', '°C', -20, 70, 0, 'elec',
+  [{ecu: DME, did: '402B', f: dec(0, 16, {sign: true, div: 10})}]);
 
 export function fmtDur(s: number): string {
   s = Math.max(0, Math.floor(s));
@@ -321,3 +362,14 @@ export function dtcText(code: string): string {
   const sub = code[0] === 'P' && /[0-7A]/.test(d) ? t(`dtc.p${d}` as Key) : '';
   return `${sys} · ${kind}${sub ? ' · ' + sub : ''}`;
 }
+
+// ---------- ความหมายรหัสเฉพาะ BMW (เฉพาะที่มีแหล่งอ้างอิง เช่น TSB ของ BMW) ----------
+const BMW_DTC: Record<string, [string, string]> = {
+  '21A50A': ['ระบบสตาร์ท: สตาร์ทเตอร์แบบเฟือง (pinion) ทำงานไม่ทันเวลาหลายครั้ง — มักเป็นสตาร์ทเตอร์เสีย', 'Start system, pinion starter: timeout occurred multiple times — usually a failed starter'],
+  '21A511': ['ระบบสตาร์ท: สตาร์ทเตอร์จับ/ปลดเฟืองไม่ทันเวลา', 'Start system: starter engage/disengage timeout'],
+  '21A510': ['ระบบสตาร์ท: มอเตอร์ไฟฟ้า (EME) ติดเครื่องไม่ทันเวลา', 'Start system, EME: timeout'],
+  '21A02D': ['ค่าชดเชยระยะยกวาล์วตอนเดินเบา — BMW แก้ด้วยการอัปเดตซอฟต์แวร์ DME', 'Combustion control: valve lift correction at idle — BMW fix is a DME software update'],
+  '801C20': ['เกตเวย์: หน่วยความจำรหัสเต็ม (ตัวกล่องไม่ได้เสีย)', 'Gateway: fault memory full (module itself is fine)'],
+  '804890': ['ไฟเลี้ยว: ตรวจความสมเหตุสมผลไม่ผ่าน ระบบปิดฟังก์ชัน', 'Turn signal plausibility check failed: function deactivated'],
+};
+export const bmwDtcText = (code: string): string | null => BMW_DTC[code]?.[getLang() === 'th' ? 0 : 1] ?? null;

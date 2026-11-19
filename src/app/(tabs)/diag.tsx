@@ -4,8 +4,9 @@ import { useCallback } from 'react';
 import { ActivityIndicator, Linking, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import Svg, { Path } from 'react-native-svg';
 import { t as tr, type Key } from '../../i18n';
-import { dtcText, SRC } from '../../obd/catalog';
-import { diag, diagClear, diagScan, elm, session, setPage } from '../../core/engine';
+import { bmwDtcText, dtcText, SRC } from '../../obd/catalog';
+import { ecuHex } from '../../obd/bmw';
+import { bmwDiag, bmwDtcClear, bmwDtcScan, diag, diagClear, diagScan, elm, session, setPage, type EcuDtc } from '../../core/engine';
 import { useStore } from '../../core/store';
 import { Btn, Card, confirm, H2, Hint } from '../../ui/kit';
 import { useTheme } from '../../ui/theme';
@@ -64,6 +65,8 @@ export default function Diag() {
         </Card>
       </Pressable>
 
+      <BmwCodes on={on} />
+
       <H2>{tr('diag.codes')}</H2>
       <Card style={{paddingVertical: 4}}>
         {!d.dtc ? <Hint style={{paddingVertical: 10}}>{tr('diag.notRead')}</Hint>
@@ -111,6 +114,69 @@ export default function Diag() {
         ))}
       </Card>
     </ScrollView>
+  );
+}
+
+const ecuName = (e: EcuDtc) => (e.name ? tr(`ecu.${e.name}` as Key) : tr('ecu.other', {a: ecuHex(e.ecu)}));
+
+function statusText(st: number) {
+  const out: string[] = [];
+  if (st & 0x01) out.push(tr('bd.st.now'));
+  if (st & 0x08) out.push(tr('bd.st.confirmed'));
+  else if (st & 0x04) out.push(tr('bd.st.pending'));
+  return out.join(' · ');
+}
+
+function BmwCodes({on}: { on: boolean }) {
+  const t = useTheme();
+  const b = useStore(bmwDiag);
+  const n = b.ecus.reduce((k, e) => k + e.codes.length, 0);
+  return (
+    <>
+      <H2>{tr('bd.title')}</H2>
+      <Card style={{gap: 8}}>
+        <Hint>{tr('bd.hint')}</Hint>
+        <View style={{flexDirection: 'row', gap: 8}}>
+          <Btn title={tr('bd.scan')} kind="pri" disabled={!on || b.busy} onPress={bmwDtcScan} />
+          <Btn title={tr('bd.clear')} kind="bad" disabled={!on || b.busy || !n} onPress={async () => {
+            if (await confirm(tr('bd.clearQ'), tr('bd.clearMsg'), tr('bd.clearOk'))) await bmwDtcClear();
+          }} />
+        </View>
+        {b.busy && (
+          <View style={{flexDirection: 'row', alignItems: 'center', gap: 8}}>
+            <ActivityIndicator color={t.acc} />
+            <Text style={{color: t.mut}}>{tr('bd.scanning', {ecu: b.at})}</Text>
+          </View>
+        )}
+        {!b.busy && b.err && <Text style={{color: t.warn, lineHeight: 20}}>{tr(`bd.${b.err}`)}</Text>}
+        {!b.busy && !b.err && !b.scanned && <Hint>{tr('bd.notScanned')}</Hint>}
+        {b.cleared != null && <Text style={{color: t.ok}}>{tr('bd.cleared', {n: b.cleared})}</Text>}
+        {b.scanned && !b.err && <Text style={{color: n ? t.warn : t.ok, fontWeight: '700'}}>{tr('bd.summary', {m: b.ecus.length, n})}</Text>}
+      </Card>
+      {b.scanned && b.ecus.map(e => (
+        <Card key={e.ecu} style={{marginTop: 8, paddingVertical: 6}}>
+          <Text style={{color: t.fg, fontSize: 15, fontWeight: '700', paddingVertical: 4}}>
+            {ecuName(e)} <Text style={{color: t.mut, fontSize: 12, fontWeight: '400'}}>{ecuHex(e.ecu)}</Text>
+          </Text>
+          {!e.codes.length ? <Text style={{color: t.ok, paddingBottom: 4}}>{tr('bd.none')}</Text> : e.codes.map(c => {
+            const col = c.status & 0x08 ? t.warn : t.acc2;
+            const txt = bmwDtcText(c.code);
+            return (
+              <View key={c.code} style={[st.dtc, {borderColor: t.line}]}>
+                <Text style={[st.code, {color: col, borderColor: col, fontSize: 16}]}>{c.code}</Text>
+                <View style={{flex: 1}}>
+                  <Text style={{color: txt ? t.fg : t.mut, fontSize: 14, lineHeight: 21}}>{txt ?? tr('bd.unknown')}</Text>
+                  <Text style={{color: t.mut, fontSize: 12}}>{statusText(c.status)}</Text>
+                </View>
+                <Pressable hitSlop={8} onPress={() => Linking.openURL('https://www.google.com/search?q=' + encodeURIComponent('BMW ' + c.code))}>
+                  <Text style={{fontSize: 18}}>🔍</Text>
+                </Pressable>
+              </View>
+            );
+          })}
+        </Card>
+      ))}
+    </>
   );
 }
 

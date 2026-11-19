@@ -85,18 +85,50 @@ export function createSimTransport(): Transport {
   // ตั้งค่าแบบ BMW (ATSH / ATCEA / ATH) — ใช้ตอบความเร็ว 4 ล้อจากกล่อง DSC
   const at = {sh: '7DF', cea: '', h1: false};
   let drop = 0;
+  /** ข้อความ UDS (hex) จากกล่อง ecu → เฟรม ISO-TP แบบ extended addressing เหมือนรถจริง */
+  function udsFrames(ecu: string, data: string): string {
+    const bytes = data.match(/../g)!;
+    const len = bytes.length, hdr = at.h1 ? '6' + ecu : '';
+    if (len <= 6) return hdr + 'F1' + h(len) + bytes.join('');
+    const out = [hdr + 'F110' + h(len) + bytes.slice(0, 5).join('')];
+    for (let i = 5, n = 1; i < len; i += 6, n++) out.push(hdr + 'F12' + (n & 15).toString(16).toUpperCase() + bytes.slice(i, i + 6).join('').padEnd(12, '0'));
+    return out.join('\n');
+  }
   function wheelFrames(): string {
     const v = s.speed;
     // เลี้ยวโค้งเล็กน้อย + ล้อหลังซ้ายเซนเซอร์เสีย: สัญญาณหายเป็นช่วงๆ (ให้เห็นในโหมดจำลอง)
     const turn = Math.sin(s.run / 6) * 0.02;
     if (drop > 0) drop--; else if (v > 10 && Math.random() < 0.02) drop = 3;
     const w = [v * (1 + turn), v * (1 - turn), drop ? 0 : v * (1 + turn * 0.8), v * (1 - turn * 0.8)];
-    const data = '62DBE4' + w.map(x => h(Math.max(0, x + noise(0.1)) * 100, 2)).join('') + '0101010101646464640000';
-    const bytes = data.match(/../g)!;
-    const len = bytes.length, hdr = at.h1 ? '629' : '';
-    const out = [hdr + 'F110' + h(len) + bytes.slice(0, 5).join('')];
-    for (let i = 5, n = 1; i < len; i += 6, n++) out.push(hdr + 'F12' + (n & 15).toString(16).toUpperCase() + bytes.slice(i, i + 6).join('').padEnd(12, '0'));
-    return out.join('\n');
+    return udsFrames('29', '62DBE4' + w.map(x => h(Math.max(0, x + noise(0.1)) * 100, 2)).join('') + '0101010101646464640000');
+  }
+
+  // รถจำลองเป็น 330e: แบตไฮบริด + แบต 12V + รหัสข้อผิดพลาดบางกล่อง
+  const bmwDtc: Record<string, string> = {
+    '12': '21A50A2F21A02D2F21A51124', '10': '801C2009', '72': '80489009', '29': '',
+  };
+  function bmwAnswer(ecu: string, cmd: string): string {
+    const cur = -8 + noise(2), soc = 62.4 - s.run / 600;
+    const DID: Record<string, () => string> = {
+      '07E5CE': () => udsFrames('07', '62E5CE' + h(soc * 100, 2)),
+      '07DD68': () => udsFrames('07', '62DD68' + h((352 + cur * 0.1) * 100, 2)),
+      '07E561': () => udsFrames('07', '62E561' + '0000' + h((-cur * 100) & 0xffff, 2)),
+      '07E5C7': () => udsFrames('07', '62E5C7' + '00000058'),
+      '07DDC0': () => udsFrames('07', '62DDC0' + h(2950, 2) + h(3125, 2) + '01FF'),
+      // ความจุ ต่ำ/สูง/เฉลี่ย · แรงดันเซลล์ ต่ำ/สูง/เฉลี่ย · อุณหภูมิ ×3 · ความต้านทาน ×3 · SoC เซลล์ ×3 · OCV ×3 · aging
+      '07DFA0': () => udsFrames('07', '62DFA0' + h(2290, 2) + h(2410, 2) + h(2340, 2) + h(39250, 2) + h(39410, 2) + h(39330, 2)
+        + '0B54'.repeat(3) + '3500'.repeat(3) + h(soc * 100, 2).repeat(3) + '9E84'.repeat(3) + '3A38'),
+      '12402B': () => udsFrames('12', '62402B' + '0118' + h((14.05 - 6 + noise(0.02)) * 4000, 2) + h((6 + 200) * 12.5, 2) + '0000'),
+      '12F190': () => udsFrames('12', '62F190' + '4D4D4638453134303130414331333936'),
+    };
+    const k = ecu + cmd.slice(2);
+    if (cmd.startsWith('22')) {
+      const f = DID[k] ?? (ecu === '29' && cmd === '22DBE4' ? wheelFrames : null);
+      return f ? f() : ['07', '12', '29', '1A'].includes(ecu) ? udsFrames(ecu, '7F2231') : 'NO DATA';
+    }
+    if (cmd === '19020D' && ecu in bmwDtc) return udsFrames(ecu, '5902FF' + bmwDtc[ecu]);
+    if (cmd === '14FFFFFF' && ecu in bmwDtc) { bmwDtc[ecu] = ''; return udsFrames(ecu, '54'); }
+    return 'NO DATA';
   }
 
   function answer(cmd: string): string {
@@ -105,7 +137,7 @@ export function createSimTransport(): Transport {
     if (cmd.startsWith('ATSH')) { at.sh = cmd.slice(4); return 'OK'; }
     if (cmd.startsWith('ATCEA')) { at.cea = cmd.slice(5); return 'OK'; }
     if (cmd === 'ATH1' || cmd === 'ATH0') { at.h1 = cmd === 'ATH1'; return 'OK'; }
-    if (at.sh === '6F1') return at.cea === '29' && cmd === '22DBE4' ? wheelFrames() : 'NO DATA';
+    if (at.sh === '6F1') return cmd.startsWith('AT') ? 'OK' : bmwAnswer(at.cea, cmd);
     if (cmd === 'ATI') return 'ELM327 v1.5 (sim)';
     if (cmd === 'ATRV') return (14.1 + noise(0.2)).toFixed(1) + 'V';
     if (cmd === 'ATDPN') return 'A6';
